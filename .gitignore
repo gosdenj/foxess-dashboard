@@ -1,0 +1,20 @@
+# The settings file holds the FoxESS password, the Open API key and the
+# Octopus API key in plain text. It is written with 0600 permissions and
+# must never be committed.
+config.json
+
+# Runtime state: the half-hourly history the dashboard records as it runs.
+config-history.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

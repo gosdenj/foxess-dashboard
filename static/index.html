@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0e16">
+<title>FoxESS</title>
+<style>
+:root{
+  --bg:#0a0e16; --panel:#111827; --panel2:#0f1622; --line:rgba(255,255,255,.08);
+  --text:#e5e9f0; --muted:#8b97ab; --dim:#5d6a80;
+  --pv:#f5b642; --load:#4a9eff; --grid:#a78bfa; --bat:#34d399; --alarm:#f87171;
+  --flux:#f0a868;
+  --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",
+            "Liberation Sans","DejaVu Sans","Noto Sans",Arial,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,
+              "Liberation Mono","DejaVu Sans Mono","Noto Sans Mono",monospace;
+  --gap:clamp(5px,.95vmin,13px);
+  --pad:clamp(7px,1.25vmin,16px);
+  --fs:clamp(13px,calc(0.7vmin + 6px),16px);
+  --fsl:clamp(11px,calc(0.55vmin + 6px),13px);
+  --fsb:clamp(17px,calc(1.5vmin + 6px),28px);
+  --r:clamp(7px,1vmin,14px);
+}
+html[data-theme="light"]{
+  --bg:#f2f4f8; --panel:#ffffff; --panel2:#f7f9fc; --line:rgba(15,23,42,.12);
+  --text:#16202f; --muted:#5a6a80; --dim:#8a97a8;
+  --pv:#d98a00; --load:#1668d6; --grid:#7048d8; --bat:#0e9f6e; --alarm:#dc2626;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--bg);color:var(--text);
+     font-family:var(--font-ui);
+     font-size:var(--fs);
+     font-weight:400;
+     line-height:1.4;
+     -webkit-font-smoothing:antialiased;
+     -moz-osx-font-smoothing:grayscale;
+}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+/* ---- shell: one screen, never scrolls ---- */
+.app{height:100dvh;height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden}
+header{display:flex;align-items:center;gap:var(--gap);flex-wrap:nowrap;overflow:hidden;
+       padding:var(--pad) var(--pad) 0}
+h1{font-size:var(--fs);margin:0;font-weight:650;letter-spacing:-.01em;white-space:nowrap;
+   overflow:hidden;text-overflow:ellipsis}
+h1 .sub{color:var(--dim);font-weight:400;font-size:var(--fsl);margin-left:.5em}
+.spacer{flex:1 1 auto;min-width:0}
+.pill{display:inline-flex;align-items:center;gap:.5em;padding:.3em .7em;border-radius:999px;
+      background:var(--panel2);border:1px solid var(--line);font-size:var(--fsl);color:var(--muted);
+      white-space:nowrap}
+.dot{width:.6em;height:.6em;border-radius:50%;background:var(--dim);flex:none}
+.dot.on{background:var(--bat);box-shadow:0 0 0 .25em rgba(52,211,153,.16)}
+.dot.off{background:var(--alarm);box-shadow:0 0 0 .25em rgba(248,113,113,.16)}
+.gear{background:var(--panel2);border:1px solid var(--line);border-radius:999px;color:var(--muted);
+      padding:.3em .65em;font-size:var(--fsl);text-decoration:none;white-space:nowrap}
+.gear:hover{color:var(--text);border-color:var(--muted)}
+
+/* ---- main grid ---- */
+.dash{display:grid;gap:var(--gap);padding:var(--gap);min-height:0;overflow:hidden;
+      grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);
+      grid-template-rows:minmax(0,1.15fr) minmax(0,1fr);
+      grid-template-areas:"flow side" "totals sys"}
+.flow{grid-area:flow}.side{grid-area:side}
+.totals{grid-area:totals}.system{grid-area:sys}
+.usage{grid-area:usage}.octopus{grid-area:octopus}.today{grid-area:today}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+       padding:var(--pad);margin:0;min-height:0;min-width:0;overflow:hidden;
+       display:flex;flex-direction:column}
+.panel h2{font-size:var(--fsl);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
+          margin:0 0 .5em;font-weight:600;flex:none}
+.panel h2 .src{text-transform:none;letter-spacing:0;font-weight:400;color:var(--dim);
+          opacity:.75;margin-left:.4em;font-size:.92em}
+.scroll{overflow-y:auto;overflow-x:hidden;min-height:0;flex:1 1 auto;scrollbar-width:thin;
+        -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent);
+        mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent)}
+.scroll::-webkit-scrollbar{width:4px}
+.scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+
+/* ---- power flow ---- */
+.flowwrap{position:relative;flex:1 1 0;min-height:0}
+.flowsvg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.flowsvg .lbl{font-family:var(--font-mono);font-size:clamp(12px,1.5vmin,15px);
+               font-weight:600;fill:var(--muted);letter-spacing:.04em}
+.flowsvg .val{font-family:var(--font-mono);font-size:clamp(21px,2.6vmin,28px);
+               font-weight:700;fill:var(--text)}
+.flowsvg .unit{font-family:var(--font-mono);font-size:clamp(10px,1.2vmin,13px);
+               font-weight:500;fill:var(--muted);
+            paint-order:stroke fill;stroke:var(--bg);stroke-width:5px;stroke-linejoin:round}
+.flowsvg .fstat{font-family:var(--font-ui);font-size:13px;fill:var(--dim)}
+.flowsvg .fname{font-family:var(--font-mono);font-size:13px;fill:var(--muted);
+                 letter-spacing:.06em}
+.flowsvg .node,.flowsvg .fnode{fill:var(--panel2);stroke-width:3}
+.flowsvg .wire{fill:none;stroke-width:2.5;stroke-linecap:round;opacity:.85}
+.flowsvg .moving{stroke-dasharray:7 11;animation:flow 1s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-18}}
+@media(prefers-reduced-motion:reduce){.flowsvg .moving{animation:none}}
+.flowhint{font-size:var(--fsl);color:var(--dim);flex:none;margin-top:.4em;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---- tiles ---- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:var(--gap);
+       flex:none}
+.tile{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
+      padding:.5em .65em;min-width:0}
+.tile .k{font-size:var(--fsl);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+         display:flex;align-items:center;gap:.5em;white-space:nowrap;overflow:hidden}
+.tile .swatch{width:.6em;height:.6em;border-radius:2px;flex:none}
+.tile .v{font-family:var(--font-mono);font-size:var(--fsb);font-weight:700;line-height:1.1;
+         margin-top:.15em;font-variant-numeric:tabular-nums;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .v small{font-size:.45em;color:var(--dim);font-weight:500;margin-left:.2em}
+.tile .note{color:var(--dim);font-size:var(--fsl);margin-top:.1em;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---- gauge ---- */
+.gauge{flex:none;display:flex;align-items:center;gap:var(--gap);justify-content:center}
+.gauge svg{height:clamp(70px,13vmin,150px);width:auto;flex:none}
+.gauge .big{font-family:var(--font-mono);font-size:clamp(16px,3.4vmin,36px);
+            font-weight:700;fill:var(--text)}
+.gauge .cap{color:var(--dim);font-size:var(--fsl);text-align:center}
+.gauge .stack{display:flex;flex-direction:column;gap:.2em;min-width:0}
+
+/* slim SoC bar - used instead of the arc when vertical space is tight */
+.socbar{display:none;position:relative;height:13px;border-radius:7px;flex:none;
+        background:rgba(128,128,128,.18);margin-top:.45em;overflow:visible}
+.socbar .fill{height:100%;border-radius:7px;background:var(--bat);width:0}
+.socbar .floor{position:absolute;top:-4px;bottom:-4px;width:3px;border-radius:2px;
+               background:var(--alarm)}
+.socbar .cap{position:absolute;left:0;right:0;top:16px;font-size:var(--fsl);color:var(--dim);
+             text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---- tables ---- */
+table{width:100%;border-collapse:collapse;font-size:var(--fsl)}
+td{padding:.32em 0;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.k{color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+td.v{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;padding-left:.6em}
+.hint{color:var(--dim);font-size:var(--fsl);margin-top:.4em;flex:none;line-height:1.4}
+
+
+.ringsvg .rhub{font-family:var(--font-ui);font-size:13px;fill:var(--muted);
+                letter-spacing:.06em}
+
+/* ---- responsive ---- */
+.tiny-only{display:none}
+
+/* ---- panel visibility toggles ---- */
+body.no-totals .totals{display:none}
+body.no-system .system{display:none}
+body.no-soc .gauge,body.no-soc .socbar{display:none}
+body[data-layout="full"] .dash{grid-template-areas:"flow side" "totals sys"}
+body.no-totals[data-layout="full"] .dash{grid-template-areas:"flow side" "sys sys"}
+body.no-system[data-layout="full"] .dash{grid-template-areas:"flow side" "totals totals"}
+body.no-totals.no-system[data-layout="full"] .dash{grid-template-areas:"flow side" "flow side"}
+@media(max-width:1000px),(max-height:560px){
+  .dash{grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+        grid-template-rows:minmax(0,1.2fr) minmax(0,1fr);
+        grid-template-areas:"flow flow" "side totals"}
+  .system{display:none}
+  .gauge{display:none}
+  .socbar{display:block}
+  .totals .hint{display:none}
+  .tiles{grid-template-columns:repeat(5,minmax(0,1fr));gap:calc(var(--gap) * .7)}
+  .tile{padding:.4em .5em}
+
+}
+@media(max-width:640px),(max-height:400px){
+  body[data-slide="usage"] .dash{grid-template-areas:"usage usage" "today today"}
+  .dash{grid-template-columns:minmax(0,1fr);
+        grid-template-rows:minmax(0,1.25fr) minmax(0,1fr);
+        grid-template-areas:"flow" "side"}
+  .totals{display:none}
+  h1 .sub{display:none}
+}
+/* Tiny screens (3.5" and 2.8" LCDs): the diagram cannot be read at this
+   size, so drop it and give the whole screen to the numbers. */
+@media(max-width:560px),(max-height:360px){
+  .dash{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);
+        grid-template-areas:"side"}
+  .flow{display:none}
+  .side{justify-content:center}
+  .side h2{display:none}
+  .tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .tile .note{display:none}
+
+  .socbar{height:auto;margin-top:.5em;padding-bottom:.15em}
+  .socbar .fill{height:11px}
+  .socbar .floor{top:0;bottom:auto;height:11px}
+  .socbar .cap{position:static;display:block;margin-top:.3em;text-align:center}
+  .flowhint.tiny-only{white-space:normal;font-size:var(--fsl);
+                      text-align:center;margin-top:.45em}
+  .tiny-only{display:block}
+}
+/* Five tiles across need ~440px of viewport; below that, 3+2 wraps instead */
+@media(min-width:440px){
+  body:where([data-layout="tiny"]) .tiles{grid-template-columns:repeat(5,minmax(0,1fr))}
+}
+@media(max-width:400px){
+  .pill.hide-sm{display:none}
+}
+
+/* ---- explicit layout overrides from the settings page ---- */
+body[data-layout="full"] .dash{
+  grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);
+  grid-template-rows:minmax(0,1.15fr) minmax(0,1fr);
+  grid-template-areas:"flow side" "totals sys"}
+body[data-layout="compact"] .dash{
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  grid-template-rows:minmax(0,1.2fr) minmax(0,1fr);
+  grid-template-areas:"flow flow" "side totals"}
+body[data-layout="compact"] .system{display:none}
+body[data-layout="tiny"] .dash{
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:minmax(0,1.25fr) minmax(0,1fr);
+  grid-template-areas:"flow" "side"}
+body[data-layout="tiny"] .totals,body[data-layout="tiny"] .system{display:none}
+
+.err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.32);color:#fca5a5;
+     border-radius:var(--r);padding:.5em .8em;font-size:var(--fsl);margin:0 var(--gap);
+     flex:none}
+/* ---- the target: Raspberry Pi 3 + official 7" touch display, 800x480 ----
+   A fixed target means the type can be sized for exactly this panel instead
+   of being compromised for a range of unknown screens. */
+@media(min-width:760px) and (max-width:900px) and (min-height:450px) and (max-height:520px){
+  :root{
+    --fs:15px;
+    --fsl:13px;
+    --fsb:24px;
+    --gap:7px;
+    --pad:9px;
+  }
+  /* Full-width diagram on top, live tiles and totals sharing the bottom row,
+     so the tiles get the width they need for large numbers. */
+  body:not([data-layout="tiny"]) .dash{
+    grid-template-columns:minmax(0,2fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1.18fr) minmax(0,1fr);
+    grid-template-areas:"flow flow" "side totals";
+  }
+  .flowsvg .lbl{font-size:15px}
+  .flowsvg .val{font-size:27px}
+  .flowsvg .unit{font-size:13px}
+  .flowsvg .fstat{font-size:14px}
+  .flowsvg .fname{font-size:14px}
+  .tile .note{display:none}
+  .tile .v{line-height:1.05}
+  .tile{padding:.45em .55em}
+  .tiles{gap:calc(var(--gap) * .7)}
+  /* the SoC caption is absolutely positioned below the bar, so the bar needs
+     bottom margin of its own or it collides with what follows */
+  .socbar{height:16px;margin-top:.55em;margin-bottom:1.55em}
+  .socbar .fill{height:16px}
+  .socbar .floor{top:-4px;bottom:-4px;height:24px}
+  .flowhint{font-size:13px}
+  td{padding:.4em 0}
+  .totals .hint{display:none}
+
+  /* The self-sufficiency line moves down into the LIVE panel, which has room
+     for it. That buys ~25px of height for the totals table. */
+  #flowHint{display:none}
+  .flowhint.tiny-only{display:block;white-space:nowrap;overflow:hidden;
+                      text-overflow:ellipsis;margin-top:.5em}
+
+  /* Tighter rows so the table fits without clipping a row in half. */
+  .totals td{padding:.05em 0}
+  .totals tr.p3{display:none}
+}
+
+/* ---- rings diagram: a hub and its satellites, Home Assistant style ----
+   Sits at the end of the stylesheet so it wins over the responsive rules,
+   but only for the automatic layout - an explicit "full" or "compact"
+   choice from the settings page still wins, and the small-screen layouts
+   keep their own arrangement. */
+.ringsvg{display:none}
+body[data-diagram="rings"] .ringsvg{display:block}
+body[data-diagram="rings"] .flowsvg:not(.ringsvg){display:none}
+body[data-diagram="rings"][data-layout="auto"] .system,
+body[data-diagram="flow"][data-layout="auto"] .system{display:none}
+/* ...except on the energy slide, which is where it belongs */
+body[data-diagram="rings"] #flowHint{display:none}
+body[data-diagram="flow"] .side .flowhint.tiny-only{display:none}
+/* the hub shows the battery level now, so the summary line moves down into
+   the LIVE panel - and the SoC bar caption gives up its place for it,
+   because the SoC tile already shows the number. */
+body[data-diagram="rings"] .socbar .cap{display:none}
+/* the caption is absolutely positioned, so with it gone the bar does not
+   need the room it was reserving under itself */
+body[data-diagram="rings"] .socbar{margin-bottom:.15em}
+
+
+
+.ringsvg .rnode{fill:var(--panel2);stroke-width:3}
+.ringsvg .rtrack{fill:none;stroke:var(--line);stroke-width:6}
+.ringsvg .rarc{fill:none;stroke-width:6;stroke-linecap:round;
+               transition:stroke-dasharray .4s ease, stroke .4s ease}
+.ringsvg .rval{font-family:var(--font-mono);font-size:25px;fill:var(--text)}
+.ringsvg .rname{font-family:var(--font-mono);font-size:13px;fill:var(--muted);
+                letter-spacing:.06em}
+.ringsvg .rstatus{font-family:var(--font-ui);font-size:13px;fill:var(--dim)}
+.ringsvg .rval.charged{fill:var(--bat)}
+.ringsvg .rval.low{fill:var(--pv)}
+.ringsvg .rval.crit{fill:var(--alarm)}
+.ringsvg .ricon{stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.ringsvg .rwire{fill:none;stroke-width:2.5;stroke-linecap:round;opacity:.9;
+                 stroke-dasharray:5 9}
+.ringsvg .rwire.rev{animation-direction:reverse}
+.ringsvg .moving{animation:rflow 1.1s linear infinite}
+@keyframes rflow{to{stroke-dashoffset:-28}}
+
+
+/* ---- the slides -------------------------------------------------------
+   A slide is a named view. Only the panels that belong to the current one
+   are shown, and the grid is laid out for that slide. */
+.usage,.octopus,.today{display:none}
+body[data-slide="power"] .usage,
+body[data-slide="power"] .octopus,
+body[data-slide="power"] .today{display:none}
+body[data-slide="usage"] .flow,
+body[data-slide="usage"] .side,
+body[data-slide="usage"] .totals,
+body[data-slide="usage"] .system{display:none}
+body[data-slide="usage"] .usage,
+body[data-slide="usage"] .octopus,
+body[data-slide="usage"] .today{display:flex}
+
+/* The grid for each slide. These have to be per breakpoint - a desktop
+   area map applied at 800x480 would override the compact layout. */
+@media(min-width:1001px) and (min-height:561px){
+  body[data-slide="power"] .dash{
+    grid-template-areas:"flow side" "totals sys"}
+  body[data-slide="usage"] .dash{
+    grid-template-columns:minmax(0,2fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1.45fr) minmax(0,1fr);
+    grid-template-areas:"usage octopus" "today today"}
+}
+
+/* the chart */
+.chartbox{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+  flex:1 1 auto;min-height:0;position:relative;overflow:hidden}
+.chartbox svg{position:absolute;inset:0;width:100%;height:100%}
+.legend{display:flex;gap:14px;font-size:var(--fsl);color:var(--dim);flex:none;
+  margin-top:.45em;align-items:center;white-space:nowrap;overflow:hidden}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;
+  vertical-align:-1px}
+.bandtag{display:inline-block;font-size:.78em;letter-spacing:.06em;text-transform:uppercase;
+  padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);
+  margin-left:auto;flex:none}
+.bandtag.peak{color:var(--flux);border-color:rgba(240,168,104,.45);
+  background:rgba(240,168,104,.12)}
+.bandtag.cheap{color:#7dd3fc;border-color:rgba(125,211,252,.4);
+  background:rgba(125,211,252,.1)}
+.octopus .tiles{grid-template-columns:repeat(2,minmax(0,1fr));flex:1 1 auto;min-height:0}
+.octopus h2{display:flex;align-items:center;gap:.5em}
+.octopus .livepill{margin-left:auto;text-transform:none;letter-spacing:0;
+  font-weight:600;color:var(--flux);border:1px solid var(--flux);
+  border-radius:999px;padding:.05em .5em;font-size:var(--fss);
+  white-space:nowrap;opacity:.95}
+.octopus .livepill[hidden]{display:none}
+.octopus .tile .note.peak{color:var(--flux)}
+.octopus .tile .note.cheap{color:#7dd3fc}
+.octopus .tiles .tile{justify-content:center}
+.octopus .tiles .tile .v{font-size:clamp(19px,2.1vmin,26px)}
+.today .tiles{grid-template-columns:repeat(6,minmax(0,1fr));flex:1 1 auto;min-height:0}
+.today .tiles .tile{justify-content:center}
+.today .tiles .tile .v{font-size:clamp(17px,2vmin,26px)}
+.panel .hint{color:var(--dim);font-size:var(--fsl);margin-top:.5em;flex:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.panel .hint b{color:var(--flux);font-weight:600}
+/* The Octopus panel is narrow, so its hint wraps rather than being cut */
+body[data-slide="usage"] .octopus .hint{white-space:normal;overflow:visible;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+
+/* ---- the Live panel on a large screen ---------------------------------
+   The panel should show what the diagram does not. The rings diagram
+   already carries the battery level - in the hub and around the battery
+   node - so the panel drops it and gives the space to the power figures.
+   The linear flow diagram has no battery level in it at all, so there the
+   panel carries it, as a ring in the same language as the diagram.
+
+     flow  ->  B   a battery ring on the left, four stats in a 2x2 grid
+     rings ->  E   four large stats across the full width
+*/
+@media(min-width:1001px) and (min-height:561px){
+  .side{display:grid;grid-template-columns:minmax(0,1fr);
+        grid-template-rows:auto minmax(0,1fr) auto;row-gap:0}
+  .side h2{grid-row:1}
+  .side .tiles{grid-row:2}
+  .side .flowhint.tiny-only{grid-row:3}
+
+  /* the battery tile is the diagram's job on a big screen */
+  .side .tiles .tile.soc{display:none}
+
+  /* Big numbers - the panel has the room, so use it. The size steps with
+     the width, because the widest value ("-12.34") needs three times the
+     font size and the tiles get narrower as the panel does. */
+  .side{--tval:34px}
+  .side .tile{display:flex;flex-direction:column;justify-content:center;
+               padding:.6em .8em}
+  .side .tile .v{font-size:var(--tval);margin-top:.2em}
+  .side .tile .note{font-size:14px;margin-top:.25em}
+
+  /* E - rings: four stats across the full width, and no ring - the
+     diagram is showing the battery level already */
+  body[data-diagram="rings"] .side .gauge{display:none}
+  body[data-diagram="rings"] .side .tiles{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    grid-template-rows:minmax(0,1fr)}
+  body[data-diagram="rings"] .side .tile .note{font-size:15px}
+  /* the rings diagram is the only place the level appears, so say so */
+  body[data-diagram="rings"] .side .flowhint.tiny-only{
+    display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    margin-top:.7em}
+
+  /* B - flow: the battery ring on the left, four stats in a 2x2 grid */
+  body[data-diagram="flow"] .side{
+    grid-template-columns:238px minmax(0,1fr);
+    grid-template-rows:auto minmax(0,1fr);column-gap:18px}
+  body[data-diagram="flow"] .side h2{grid-column:1/-1;grid-row:1}
+  body[data-diagram="flow"] .side .gauge{grid-column:1;grid-row:2;
+    flex-direction:column;justify-content:center;gap:.35em}
+  body[data-diagram="flow"] .side .gauge svg{height:172px;width:172px}
+  body[data-diagram="flow"] .side .gauge .stack{align-items:center}
+  body[data-diagram="flow"] .side .tiles{grid-column:2;grid-row:2;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-rows:repeat(2,minmax(0,1fr))}
+  body[data-diagram="flow"] .side .tile{justify-content:center}
+}
+
+/* A narrow desktop gives the panel a side column rather than the full
+   width, so there is no room for a ring beside the stats - the ring goes
+   above them instead. */
+@media(min-width:1001px) and (max-width:1200px) and (min-height:561px){
+  body[data-diagram="flow"] .side{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto minmax(0,1fr);row-gap:4px}
+  body[data-diagram="flow"] .side .gauge{grid-column:1;grid-row:2;
+    flex-direction:row;justify-content:center;gap:10px}
+  body[data-diagram="flow"] .side .gauge svg{height:92px;width:92px}
+  body[data-diagram="flow"] .side .tiles{grid-column:1;grid-row:3}
+}
+
+/* the value has to fit the tile, so it steps up with the width */
+@media(min-width:1280px) and (min-height:561px){ .side{--tval:40px} }
+@media(min-width:1600px) and (min-height:561px){ .side{--tval:48px} }
+
+/* ---- the grid for each slide -------------------------------------------
+   The slides own the grid. These rules sit at the end of the stylesheet so
+   they win over the layout rules, and they are per breakpoint - a desktop
+   area map applied at 800x480 would override the compact layout.
+
+     power   the diagram and the live figures
+     usage   the half-hourly chart, the Octopus figures and today's totals
+     energy  the cumulative totals, the system details and the live figures */
+@media(min-width:1001px) and (min-height:561px){
+  body[data-slide="power"] .dash{
+    grid-template-columns:minmax(0,2fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1.5fr) minmax(0,1fr);
+    grid-template-areas:"flow flow" "side totals"}
+  body[data-slide="usage"] .dash{
+    grid-template-columns:minmax(0,2fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1.45fr) minmax(0,1fr);
+    grid-template-areas:"usage octopus" "today today"}
+}
+@media(max-width:1000px),(max-height:560px){
+  body[data-slide="power"] .dash{
+    grid-template-columns:minmax(0,2fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1.18fr) minmax(0,1fr);
+    grid-template-areas:"flow flow" "side totals"}
+  /* The chart and the Octopus figures sit side by side, and today's
+     totals run the full width underneath - the same shape as the
+     mock-up. */
+  body[data-slide="usage"] .dash{
+    grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);
+    grid-template-areas:"usage octopus" "today today";
+    grid-template-rows:minmax(0,1.32fr) minmax(0,1fr)}
+  body[data-slide="usage"] .octopus .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* the panel is narrow, so the labels need the room */
+  body[data-slide="usage"] .octopus .tile{padding:.45em .5em}
+  body[data-slide="usage"] .octopus .tile .k{letter-spacing:.02em}
+  body[data-slide="usage"] .today .tiles{grid-template-columns:repeat(6,minmax(0,1fr))}
+}
+@media(max-width:640px),(max-height:400px){
+  body[data-slide="power"] .dash{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr);
+    grid-template-areas:"side"}
+  /* a diagram this small is unreadable - the figures are what matter */
+  body[data-slide="power"] .flow{display:none}
+  /* On a tiny screen each slide keeps only what it is for: the chart for
+     the usage slide, the counters for the energy one. */
+  body[data-slide="usage"] .dash{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr);
+    grid-template-areas:"usage"}
+  body[data-slide="usage"] .octopus,
+  body[data-slide="usage"] .today{display:none}
+  /* the SoC bar does not fit here - the SoC tile carries the level */
+  body[data-slide="power"] .side .socbar{display:none}
+}
+
+/* ---- the weather slide ------------------------------------------------
+   Right now, the solar forecast, and the week ahead.  The panels are
+   laid out the same way at every size, because the mock-up was drawn
+   for the 7" screen and it works there.
+*/
+.now,.sun,.week{display:none}
+body[data-slide="weather"] .flow,
+body[data-slide="weather"] .side,
+body[data-slide="weather"] .totals,
+body[data-slide="weather"] .system,
+body[data-slide="weather"] .usage,
+body[data-slide="weather"] .octopus,
+body[data-slide="weather"] .today{display:none}
+body[data-slide="weather"] .now,
+body[data-slide="weather"] .sun,
+body[data-slide="weather"] .week{display:flex}
+.now{grid-area:now}.sun{grid-area:sun}.week{grid-area:week}
+body[data-slide="weather"] .dash{
+  grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);
+  grid-template-rows:minmax(0,1.12fr) minmax(0,1fr);
+  grid-template-areas:"now sun" "week week"}
+@media(max-width:640px),(max-height:400px){
+  /* too small for three panels - the conditions and the week are what
+     matter, so the forecast goes */
+  body[data-slide="weather"] .dash{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr) minmax(0,1fr);
+    grid-template-areas:"now" "week"}
+  body[data-slide="weather"] .sun{display:none}
+  /* and the details that do not fit go as well - the screen is too
+     small for six rows of them */
+  body[data-slide="weather"] .now .kv.opt{display:none}
+  body[data-slide="weather"] .now .kvs{grid-template-columns:minmax(0,1fr)}
+  body[data-slide="weather"] .now .kvs .kv:nth-child(n+2){display:none}
+}
+/* On the very smallest screens the list of details goes altogether and
+   the wind rides along with the conditions instead. */
+@media(max-width:420px),(max-height:280px){
+  body[data-slide="weather"] .now .kvs{display:none}
+  body[data-slide="weather"] .now .tw{display:inline;margin-left:.45em}
+  /* the wind and the rain chance do not fit on a day card this small */
+  body[data-slide="weather"] .wday .wd,
+  body[data-slide="weather"] .wday .r{display:none}
+  /* the padding gives way instead - the type does not shrink */
+  body[data-slide="weather"] .wday{padding:.2em .1em}
+  body[data-slide="weather"] .dash{
+    grid-template-rows:minmax(0,.9fr) minmax(0,1.1fr)}
+}
+
+/* right now */
+.nowbody{display:flex;align-items:center;gap:calc(var(--gap)*1.1);flex:none}
+.nowicon{width:clamp(30px,6.6vmin,56px);height:clamp(30px,6.6vmin,56px);flex:none}
+.nowicon svg{width:100%;height:100%;display:block}
+.nowtemp{min-width:0;flex:1 1 auto}
+.nowtemp .big{font-family:var(--font-mono);font-size:clamp(28px,6.2vmin,52px);
+              font-weight:300;line-height:1;letter-spacing:-.02em;
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nowtemp .cond{color:var(--muted);font-size:var(--fs);margin-top:.15em;
+               white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The wind is in the list of details, but on a tiny screen the list goes
+   and the wind comes up next to the conditions instead. */
+.nowtemp .tw{display:none}
+.now .kvs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+          gap:0 calc(var(--gap)*1.4);margin-top:calc(var(--gap)*.7);
+          flex:1 1 auto;min-height:0;align-content:start}
+.kv{display:flex;justify-content:space-between;align-items:baseline;gap:6px;
+    padding:.16em 0;border-bottom:1px solid var(--line);min-width:0}
+.kv:last-child{border-bottom:0}
+.kv .k{color:var(--muted);font-size:var(--fsl);white-space:nowrap;overflow:hidden;
+       text-overflow:ellipsis}
+.kv .v{font-family:var(--font-mono);font-size:var(--fsl);color:var(--text);
+       text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* the solar forecast */
+.sunrows{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;
+         justify-content:space-evenly;gap:1px}
+.sunrow{display:grid;grid-template-columns:3.1em minmax(0,1fr) 6.1em;
+        align-items:center;gap:calc(var(--gap)*.7);font-size:var(--fsl)}
+.sunrow .d{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sunrow .bar{position:relative;height:clamp(7px,1.3vmin,14px);
+             background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden;
+             display:block}
+.sunrow .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--pv);
+               opacity:.75;display:block;border-radius:3px;width:0}
+.sunrow .v{font-family:var(--font-mono);text-align:right;white-space:nowrap;
+           color:var(--text);font-variant-numeric:tabular-nums}
+.sunrow.first .d{color:var(--text)}
+.sun .hint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* the week ahead */
+.week .days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));
+             gap:calc(var(--gap)*.6);flex:1 1 auto;min-height:0}
+.wday{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
+      padding:.35em .15em;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;gap:1px;min-width:0;overflow:hidden}
+.wday .d{font-size:var(--fsl);color:var(--muted);text-transform:uppercase;
+         letter-spacing:.05em;white-space:nowrap;line-height:1.2}
+.wday .ic{width:clamp(20px,3.8vmin,32px);height:clamp(20px,3.8vmin,32px);flex:none;
+          display:block}
+.wday .ic svg{width:100%;height:100%;display:block}
+.wday .t{font-family:var(--font-mono);font-size:clamp(12px,1.9vmin,16px);
+         font-weight:600;line-height:1.15}
+.wday .lo{font-family:var(--font-mono);font-size:var(--fsl);color:var(--muted);
+          line-height:1.15}
+.wday .r{font-size:var(--fsl);color:var(--load);line-height:1.15;min-height:1.15em}
+.wday .wd{font-size:var(--fsl);color:var(--dim);white-space:nowrap;overflow:hidden;
+          text-overflow:ellipsis;max-width:100%;line-height:1.15}
+
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1><span id="plantName">FoxESS</span><span class="sub" id="plantMeta"></span></h1>
+    <div class="spacer"></div>
+    <span class="pill hide-sm"><span class="dot off" id="liveDot"></span><span id="liveStatus">connecting…</span></span>
+    <span class="pill mono hide-sm" id="agePill">—</span>
+    <span class="pill mono" id="clockPill">—</span>
+    <a class="gear" href="/settings" id="gear" title="Settings">⚙</a>
+  </header>
+
+  <div id="errorBox" class="err" style="display:none"></div>
+
+  <div class="dash">
+
+    <section class="panel usage">
+      <h2>Grid &mdash; last 24 hours <span class="src" id="usageSource"></span></h2>
+      <div class="chartbox">
+        <svg id="usageChart" viewBox="0 0 480 162" preserveAspectRatio="xMidYMid meet">
+          <g id="usageBands"></g>
+          <g id="usageBars"></g>
+          <line id="usageAxis" x1="0" y1="140" x2="480" y2="140" stroke="rgba(255,255,255,.10)"/>
+          <g id="usageTicks" fill="var(--dim)" font-size="9" font-family="var(--font-mono)"></g>
+          <g id="usageScale" fill="var(--dim)" font-size="9" font-family="var(--font-mono)"></g>
+          <g id="usageNow"></g>
+        </svg>
+      </div>
+      <div class="legend" id="usageLegend"></div>
+    </section>
+
+    <section class="panel octopus">
+      <h2>Octopus <span id="octTariff" style="text-transform:none;letter-spacing:0"></span>
+        <span id="octLive" class="livepill" hidden></span></h2>
+      <div class="tiles" id="octTiles"></div>
+      <div class="hint" id="octHint"></div>
+    </section>
+
+    <section class="panel today">
+      <h2>Today</h2>
+      <div class="tiles" id="todayTiles"></div>
+    </section>
+    <section class="panel flow">
+      <h2>Power flow</h2>
+      <div class="flowwrap">
+        <svg class="flowsvg" id="flowSvg" viewBox="0 0 900 274" preserveAspectRatio="xMidYMid meet">
+          <path id="wPv"   class="wire moving" d="M178 64 H 402"/>
+          <path id="wLoad" class="wire moving" d="M498 64 H 722"/>
+          <path id="wGrid" class="wire moving" d="M413 95 Q370 120 330 148"/>
+          <path id="wBat"  class="wire moving" d="M487 95 Q530 120 570 148"/>
+
+          <circle class="fnode" id="fNodePv"   cx="130" cy="64"  r="48" stroke="var(--pv)"/>
+          <circle class="fnode" id="fNodeInv"  cx="450" cy="64"  r="48" stroke="var(--bat)"/>
+          <circle class="fnode" id="fNodeLoad" cx="770" cy="64"  r="48" stroke="var(--load)"/>
+          <circle class="fnode" id="fNodeGrid" cx="330" cy="196" r="48" stroke="var(--grid)"/>
+          <circle class="fnode" id="fNodeBat"  cx="570" cy="196" r="48" stroke="var(--bat)"/>
+
+          <g class="ricon" fill="none" stroke="var(--pv)" transform="translate(130,38) scale(.8)">
+            <circle cx="0" cy="0" r="6.5"/>
+            <path d="M0 -12 V-17 M0 12 V17 M-12 0 H-17 M12 0 H17
+                     M-8.5 -8.5 L-12 -12 M8.5 8.5 L12 12
+                     M8.5 -8.5 L12 -12 M-8.5 8.5 L-12 12"/>
+          </g>
+          <g class="ricon" fill="none" stroke="var(--bat)" transform="translate(450,38) scale(.8)">
+            <circle cx="0" cy="0" r="13"/>
+            <path d="M-9 0 Q-4.5 -10 0 0 T9 0"/>
+          </g>
+          <g class="ricon" fill="var(--load)" stroke="none" transform="translate(770,38) scale(.8)">
+            <path d="M0 -13 L14 0 H9.5 V12 H-9.5 V0 H-14 Z"/>
+          </g>
+          <g class="ricon" fill="none" stroke="var(--grid)" transform="translate(330,170) scale(.8)">
+            <path d="M2 -12 L-9 2 H-1 L-3 12 L8 -2 H0 Z"/>
+          </g>
+          <g class="ricon" fill="none" stroke="var(--bat)" transform="translate(570,170) scale(.8)">
+            <rect x="-10" y="-6.5" width="19" height="13" rx="2"/>
+            <path d="M10.5 -3 H13 V3 H10.5"/>
+          </g>
+
+          <text class="val"  x="130" y="74"  text-anchor="middle" id="vPv">0.00</text>
+          <text class="fstat" x="130" y="92"  text-anchor="middle" id="fPvSt">Idle</text>
+          <text class="fname" x="130" y="128" text-anchor="middle">SOLAR</text>
+
+          <text class="lbl"  x="450" y="76"  text-anchor="middle" id="vModel">—</text>
+          <text class="fname" x="450" y="128" text-anchor="middle">INVERTER</text>
+
+          <text class="val"  x="770" y="74"  text-anchor="middle" id="vLoad">0.00</text>
+          <text class="fstat" x="770" y="92"  text-anchor="middle" id="fLoadSt">Idle</text>
+          <text class="fname" x="770" y="128" text-anchor="middle">HOUSE</text>
+
+          <text class="val"  x="330" y="206" text-anchor="middle" id="vGrid">0.00</text>
+          <text class="fstat" x="330" y="224" text-anchor="middle" id="fGridSt">Idle</text>
+          <text class="fname" x="330" y="260" text-anchor="middle">GRID</text>
+
+          <text class="val"  x="570" y="206" text-anchor="middle" id="vBat">0.00</text>
+          <text class="fstat" x="570" y="224" text-anchor="middle" id="fBatSt">Idle</text>
+          <text class="fname" x="570" y="260" text-anchor="middle">BATTERY</text>
+        </svg>
+        <svg class="flowsvg ringsvg" id="ringsSvg" viewBox="0 0 900 258" preserveAspectRatio="xMidYMid meet">
+          <path id="rLinePv"   class="rwire moving" d="M183.9 68.3 Q285.1 101.7 391.3 111.7"  stroke="var(--pv)"/>
+          <path id="rLineLoad" class="rwire moving" d="M508.7 111.7 Q614.9 101.7 716.1 68.3"  stroke="var(--load)"/>
+          <path id="rLineGrid" class="rwire moving" d="M184.2 172.9 Q289.8 165.7 391.0 134.9" stroke="var(--grid)"/>
+          <path id="rLineBat"  class="rwire moving" d="M509.0 134.9 Q610.2 165.7 715.8 172.9" stroke="var(--bat)"/>
+
+          <circle class="rnode" id="rRingPv"   cx="135" cy="58"  r="50" stroke="var(--pv)"/>
+          <circle class="rnode" id="rRingLoad" cx="765" cy="58"  r="50" stroke="var(--load)"/>
+          <circle class="rnode" id="rRingGrid" cx="135" cy="182" r="50" stroke="var(--grid)"/>
+          <circle class="rnode" cx="765" cy="182" r="50" stroke="none"/>
+          <circle class="rnode" cx="450" cy="124" r="60" stroke="none"/>
+          <circle class="rtrack" id="rTrackBat" cx="765" cy="182" r="50"/>
+          <circle class="rtrack" id="rTrackHub" cx="450" cy="124" r="60"/>
+          <circle class="rarc" id="rRingBat"  cx="765" cy="182" r="50" pathLength="100"
+                  stroke="var(--bat)" stroke-dasharray="0 100"
+                  transform="rotate(-90 765 182)"/>
+          <circle class="rarc" id="rRingHub"  cx="450" cy="124" r="60" pathLength="100"
+                  stroke="var(--bat)" stroke-dasharray="0 100"
+                  transform="rotate(-90 450 124)"/>
+
+          <g id="rIcoPv" class="ricon" fill="none" stroke="var(--pv)" transform="translate(135,30)">
+            <circle cx="0" cy="0" r="6.5"/>
+            <path d="M0 -12 V-17 M0 12 V17 M-12 0 H-17 M12 0 H17
+                     M-8.5 -8.5 L-12 -12 M8.5 8.5 L12 12
+                     M8.5 -8.5 L12 -12 M-8.5 8.5 L-12 12"/>
+          </g>
+          <g id="rIcoLoad" class="ricon" fill="var(--load)" stroke="none" transform="translate(765,30)">
+            <path d="M0 -13 L14 0 H9.5 V12 H-9.5 V0 H-14 Z"/>
+          </g>
+          <g id="rIcoGrid" class="ricon" fill="none" stroke="var(--grid)" transform="translate(135,154)">
+            <path d="M2 -12 L-9 2 H-1 L-3 12 L8 -2 H0 Z"/>
+          </g>
+          <g id="rIcoBat" class="ricon" fill="none" stroke="var(--bat)" transform="translate(765,154)">
+            <rect x="-12" y="-7.5" width="24" height="15" rx="2"/>
+            <path d="M14 -3 H16.5 V3 H14"/>
+            <rect id="rBatFill" x="-10.8" y="-6.3" width="0" height="12.6" rx="1"
+                  fill="var(--bat)" stroke="none"/>
+          </g>
+          <g id="rIcoHub" class="ricon" transform="translate(450,94)">
+            <circle cx="0" cy="0" r="13" fill="none"/>
+            <path d="M-9 0 Q-4.5 -10 0 0 T9 0" fill="none"/>
+          </g>
+
+          <text class="rval"    x="135" y="70"  text-anchor="middle" id="rPvVal">0.00</text>
+          <text class="rstatus" x="135" y="88"  text-anchor="middle" id="rPvSt">Idle</text>
+          <text class="rname"   x="135" y="125" text-anchor="middle">SOLAR</text>
+
+          <text class="rval"    x="765" y="70"  text-anchor="middle" id="rLoadVal">0.00</text>
+          <text class="rstatus" x="765" y="88"  text-anchor="middle" id="rLoadSt">Idle</text>
+          <text class="rname"   x="765" y="125" text-anchor="middle">HOUSE</text>
+
+          <text class="rval"    x="135" y="198" text-anchor="middle" id="rGridVal">0.00</text>
+          <text class="rstatus" x="135" y="216" text-anchor="middle" id="rGridSt">Idle</text>
+          <text class="rname"   x="135" y="249" text-anchor="middle">GRID</text>
+
+          <text class="rval"    x="765" y="198" text-anchor="middle" id="rBatVal">0.00</text>
+          <text class="rstatus" x="765" y="216" text-anchor="middle" id="rBatSt">Idle</text>
+          <text class="rname"   x="765" y="249" text-anchor="middle">BATTERY</text>
+
+          <text class="rval"   x="450" y="140" text-anchor="middle" id="rHubVal">0%</text>
+          <text class="rstatus" x="450" y="160" text-anchor="middle" id="rHubSt">idle</text>
+          <text class="rhub"   x="450" y="201" text-anchor="middle">INVERTER</text>
+          <text class="rstatus" x="450" y="217" text-anchor="middle" id="rHubModel">-</text>
+        </svg>
+      </div>
+      <div class="flowhint" id="flowHint"></div>
+    </section>
+
+    <section class="panel side">
+      <h2>Live</h2>
+      <div class="gauge" id="socBox">
+        <svg viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="50" fill="none" stroke="var(--line)" stroke-width="9"/>
+          <circle id="socArc" cx="60" cy="60" r="50" fill="none" stroke="var(--bat)"
+                  stroke-width="9" stroke-linecap="round" pathLength="100"
+                  stroke-dasharray="0 100" transform="rotate(-90 60 60)"/>
+          <g id="socFloor"><circle cx="60" cy="10" r="5" fill="var(--alarm)"/></g>
+          <text class="big" id="socText" x="60" y="70" text-anchor="middle">—</text>
+        </svg>
+        <div class="stack">
+          <div class="cap" id="socCap">waiting…</div>
+        </div>
+      </div>
+      <div class="tiles" id="tiles" style="margin-top:var(--gap)"></div>
+      <div class="socbar" id="socBar">
+        <div class="fill" id="socFill"></div>
+        <div class="floor" id="socFloorBar"></div>
+        <div class="cap" id="socBarCap"></div>
+      </div>
+      <div class="flowhint tiny-only" id="flowHint2"></div>
+    </section>
+
+    <section class="panel totals">
+      <h2>Today</h2>
+      <div class="scroll"><table id="daily"><tbody></tbody></table></div>
+      <div class="hint" id="dailyHint"></div>
+    </section>
+
+    <section class="panel system">
+      <h2>System</h2>
+      <div class="scroll"><table id="system"><tbody></tbody></table></div>
+    </section>
+
+    <section class="panel now">
+      <h2>Right now <span class="src" id="wxPlace"></span></h2>
+      <div class="nowbody">
+        <div class="nowicon" id="wxIcon"></div>
+        <div class="nowtemp">
+          <div class="big" id="wxTemp">—</div>
+          <div class="cond"><span id="wxText">—</span><span class="tw" id="wxWind"></span></div>
+        </div>
+      </div>
+      <div class="kvs" id="wxKvs"></div>
+    </section>
+
+    <section class="panel sun">
+      <h2>Solar forecast <span class="src" id="wxCalib"></span></h2>
+      <div class="sunrows" id="wxRows"></div>
+      <div class="hint" id="wxHint"></div>
+    </section>
+
+    <section class="panel week">
+      <h2>The week ahead <span class="src" id="wxAttribution"></span></h2>
+      <div class="days" id="wxDays"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const num = (v,d=2) => (v===null||v===undefined||Number.isNaN(v)) ? "—"
+                      : Number(v).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+const int = v => (v===null||v===undefined) ? "—" : Math.round(v).toLocaleString();
+
+let CFG = {display:{}};
+let UNITS = "kW";
+const UI = {};
+
+// Only touch the DOM when a value actually changed - on a Pi 3 every
+// needless write costs a style recalculation.
+function setText(el, text){
+  if(el && el.textContent !== text) el.textContent = text;
+}
+function setAttr(el, name, value){
+  if(el && el.getAttribute(name) !== value) el.setAttribute(name, value);
+}
+
+/* How healthy is the pack right now?
+   green while it is comfortably charged, amber when it is getting low, and
+   red once it has reached the inverter's own minimum. */
+function battHealth(soc, floor){
+  const lvl = (soc===undefined || soc===null || isNaN(soc)) ? null
+            : Math.max(0, Math.min(100, soc));
+  if(lvl===null) return {lvl:0, colour:"var(--muted)", cls:"", known:false};
+  const min = (floor===undefined || floor===null) ? 10 : floor;
+  if(lvl<=min)       return {lvl, colour:"var(--alarm)", cls:"crit",  known:true};
+  if(lvl<40)         return {lvl, colour:"var(--pv)",    cls:"low",   known:true};
+  return {lvl, colour:"var(--bat)", cls:"charged", known:true};
+}
+
+function applyDisplay(){
+  const d = CFG.display || {};
+  const theme = d.theme === "auto"
+    ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : (d.theme || "dark");
+  document.documentElement.dataset.theme = theme;
+  document.body.dataset.layout = (d.layout || "auto");
+  document.body.dataset.diagram = (d.diagram || "flow");
+  document.body.classList.toggle("no-totals", d.show_totals === false);
+  document.body.classList.toggle("no-system", d.show_system === false);
+  document.body.classList.toggle("no-soc",    d.show_soc === false);
+  UNITS = d.units === "W" ? "W" : "kW";
+}
+
+function setWire(id,color,active,dir){
+  const el = $(id);
+  el.setAttribute("stroke", color);
+  el.style.opacity = active ? ".9" : ".22";
+  el.classList.toggle("moving", active);
+  if (active) el.style.animationDirection = (dir === "rev") ? "reverse" : "normal";
+}
+
+// Convert kW -> the configured display unit
+function P(kw){ return UNITS === "W" ? kw*1000 : kw; }
+function unit(){ return UNITS; }
+function fmtP(kw){ return num(P(kw), UNITS === "W" ? 0 : 2); }
+
+function render(s){
+  window.SNAP = s;
+  const L = s.live||{}, M = s.meta||{}, T = s.totals||{};
+  if (s.settings && s.settings.display){ CFG = s.settings; applyDisplay(); }
+
+  $("plantName").textContent = M.plant_name || "FoxESS";
+  $("plantMeta").textContent = [M.inverter_sn, M.datalogger].filter(Boolean).join("  ·  ");
+  if(s.build && !$("gear").dataset.build){
+    $("gear").dataset.build = s.build;
+    $("gear").title = "Settings \u00b7 build " + s.build;
+  }
+  $("liveDot").className = "dot " + (s.connected ? "on" : "off");
+  $("liveStatus").textContent = s.connected ? "LIVE" : "offline";
+  $("agePill").textContent = (s.live_age_s!=null) ? s.live_age_s.toFixed(1)+"s" : "—";
+  const tz = (CFG.display && CFG.display.timezone && CFG.display.timezone!=="auto")
+             ? CFG.display.timezone : undefined;
+  $("clockPill").textContent = new Date((s.server_time||0)*1000).toLocaleTimeString(
+      "en-GB", {hour:"2-digit",minute:"2-digit",hour12:(CFG.display?.clock==="12h"),timeZone:tz});
+
+  if (s.api_error){
+    const b = $("errorBox"); b.style.display="block"; b.textContent="Open API: "+s.api_error;
+  } else $("errorBox").style.display="none";
+
+  const pv=L.pvPower??0, load=L.loadsPower??0, imp=L.gridConsumptionPower??0,
+        exp=L.feedinPower??0, chg=L.batChargePower??0, dis=L.batDischargePower??0,
+        soc=L.SoC;
+
+  $("vPv").textContent   = fmtP(pv);
+  $("vLoad").textContent = fmtP(load);
+  $("vGrid").textContent = fmtP(imp-exp);
+  $("vBat").textContent  = fmtP(dis-chg);
+  $("vModel").textContent = M.manager_version ? "fw "+M.manager_version : "—";
+
+  setWire("wPv","var(--pv)", pv>0.02, "fwd");
+  setWire("wLoad","var(--load)", load>0.02, "fwd");
+  setWire("wGrid","var(--grid)", (imp+exp)>0.02, imp>exp ? "rev" : "fwd");
+  // the wire is drawn from the inverter to the battery, so forward means
+  // charging; a discharge has to run backwards
+  setWire("wBat","var(--bat)", (chg+dis)>0.02, dis>chg ? "rev" : "fwd");
+
+  $("fPvSt").textContent   = pv>0.02   ? "Producing" : "Idle";
+  $("fLoadSt").textContent = load>0.02 ? "Using" : "Idle";
+  $("fGridSt").textContent = imp>0.02 ? "Importing"
+                             : exp>0.02 ? "Exporting" : "Idle";
+  $("fBatSt").textContent  = dis>0.02 ? "Discharging"
+                             : chg>0.02 ? "Charging" : "Idle";
+
+  const self = load>0.05 ? Math.max(0,Math.min(1,(load-imp)/load)) : 1;
+  const hint = load>0.05
+    ? "Self-sufficiency "+Math.round(self*100)+"% · "+(imp>0.02?"drawing "+fmtP(imp)+" "+unit()+" from the grid":"running on your own power")
+    : "No household load detected.";
+  $("flowHint").textContent = hint;
+  $("flowHint2").textContent = hint;
+
+  renderRings(s);
+  applySlide(s.slide);
+  renderUsage(s.usage || {}, s.mini || {});
+  renderOctopus(s.octopus || {}, s.mini || {});
+  renderToday(s.usage || {});
+  renderWeather(s.weather || {});
+
+  const tiles=[
+    {k:"Solar",c:"var(--pv)",v:fmtP(pv),n:pv>0.02?"generating":"no output"},
+    {k:"House",c:"var(--load)",v:fmtP(load),n:"consuming"},
+    {k:"Grid",c:"var(--grid)",v:fmtP(imp-exp),n:imp>0.02?"importing":exp>0.02?"exporting":"idle"},
+    {k:"Batt",c:"var(--bat)",v:fmtP(dis-chg),n:dis>0.02?"discharging":chg>0.02?"charging":"idle"},
+    {k:"SoC",c:"var(--bat)",v:soc!==undefined?num(soc,0):"—",u:"%",n:soc!==undefined&&M.min_soc!==undefined?"floor "+M.min_soc+"%":""},
+  ];
+  if(!UI.tilesBuilt){ UI.tilesBuilt=true;
+    $("tiles").innerHTML = tiles.map((t,i)=>
+      `<div class="tile${i===4?" soc":""}"><div class="k"><span class="swatch" id="sw${i}" style="background:${t.c}"></span>${t.k}</div>
+       <div class="v"><span class="vnum"></span>${t.u?`<small>${t.u}</small>`:""}</div><div class="note"></div></div>`).join("");
+    UI.tileVals = [...$("tiles").querySelectorAll(".vnum")];
+    UI.tileNotes= [...$("tiles").querySelectorAll(".note")];
+  }
+  tiles.forEach((t,i)=>{ setText(UI.tileVals[i], t.v); setText(UI.tileNotes[i], t.n); });
+  // the SoC tile wears the health colour, like the rings do
+  if(soc!==undefined){
+    const hc = battHealth(soc, M.min_soc ?? 10).colour;
+    setAttr($("sw4"), "style", "background:"+hc);
+    if(UI.tileVals[4]) UI.tileVals[4].style.color = hc;
+  }
+
+  if (soc!==undefined){
+    const pct = Math.max(0,Math.min(100,soc));
+    const floor = M.min_soc ?? 10;
+    const h = battHealth(soc, floor);
+    setAttr($("socArc"), "stroke-dasharray", pct+" 100");
+    setAttr($("socArc"), "stroke", h.colour);
+    $("socText").textContent = num(soc,0)+"%";
+    $("socText").style.color = h.colour;
+    const atFloor = pct<=floor+0.5;
+    $("socCap").textContent = "floor "+floor+"% · "+(atFloor?"at minimum — grid takes over":"above floor");
+    if(UI.floor !== floor){
+      UI.floor = floor;
+      const a = (floor/100) * 2 * Math.PI;
+      $("socFloor").innerHTML = `<circle cx="${(60+50*Math.sin(a)).toFixed(1)}" cy="${(60-50*Math.cos(a)).toFixed(1)}" r="5" fill="var(--alarm)"/>`;
+    }
+    // slim bar (compact layouts)
+    $("socFill").style.width = pct+"%";
+    $("socFill").style.background = h.colour;
+    $("socFloorBar").style.left = "calc("+floor+"% - 1.5px)";
+    $("socBarCap").textContent = "SoC "+num(soc,0)+"% · floor "+floor+"%"
+                              + (atFloor?" · at minimum":"");
+  }
+
+  renderDaily(s);
+
+  const sys=[
+    ["Inverter serial", M.inverter_sn||"—"],
+    ["Data logger", [M.datalogger,M.datalogger_version?"v"+M.datalogger_version:null].filter(Boolean).join(" ")||"—"],
+    ["Signal", M.signal!==undefined?M.signal+" / 100":"—"],
+    ["Firmware", [M.manager_version?"Mgr "+M.manager_version:null,M.master_version?"Mast "+M.master_version:null,
+                  M.slave_version?"Slv "+M.slave_version:null].filter(Boolean).join(" · ")||"—"],
+    ["Battery units", M.battery_units?M.battery_units+" ("+(M.battery_types||[]).join(", ")+")":"—"],
+    ["Minimum SoC", M.min_soc!==undefined?M.min_soc+" % (grid "+M.min_soc_on_grid+" %)":"—"],
+    ["Power station", M.plant_name||"—"],
+    ["Timezone", M.plant_timezone||"—"],
+    ["Plant id", M.plant_id||"—"],
+    ["WS messages", s.messages||0],
+    ["Open API age", s.api_age_s!=null?s.api_age_s.toFixed(0)+"s":"—"],
+    ["API quota", M.quota&&M.quota.remaining!==undefined?String(M.quota.remaining):"—"],
+  ];
+  if(!UI.sysBuilt){ UI.sysBuilt=true;
+    $("system").querySelector("tbody").innerHTML =
+      sys.map(r=>`<tr><td class="k">${r[0]}</td><td class="v"></td></tr>`).join("");
+    UI.sysVals = [...$("system").querySelectorAll("td.v")];
+  }
+  sys.forEach((r,i)=> setText(UI.sysVals[i], r[1]));
+}
+
+let sseOk = false;
+
+/* ---- rings diagram ------------------------------------------------------
+   A hub (the inverter, showing self-sufficiency) with four satellites.
+   Flow lines only appear when power is actually moving, so an idle system
+   stays calm instead of flickering. */
+function renderRings(s){
+  const L=s.live||{}, M=s.meta||{};
+  const pv=+(L.pvPower||0), load=+(L.loadsPower||0);
+  const imp=+(L.gridConsumptionPower||0), exp=+(L.feedinPower||0);
+  const chg=+(L.batChargePower||0), dis=+(L.batDischargePower||0);
+  const soc=+(L.SoC||0);
+
+  // -- the battery state, shared by the hub and the battery node --
+  const floor = (M.min_soc!==undefined ? M.min_soc : 10);
+  const h = battHealth(soc, floor);
+  const hasSoc = h.known;
+  const lvl = h.lvl;
+  const health = h.colour;
+  const healthClass = h.cls;
+  const activity = dis>0.02 ? "Discharging" : chg>0.02 ? "Charging" : "Idle";
+
+  // -- hub: the state of charge, right in the middle of the screen --
+  setText($("rHubVal"), hasSoc ? Math.round(lvl)+"%" : "—");
+  setText($("rHubSt"), hasSoc ? activity.toLowerCase() : "no reading");
+  setText($("rHubModel"), M.manager_version ? "fw "+M.manager_version : "-");
+  setAttr($("rRingHub"), "stroke", health);
+  setAttr($("rRingHub"), "stroke-dasharray", Math.round(lvl)+" 100");
+  setAttr($("rHubVal"), "class", "rval "+healthClass);
+  setAttr($("rIcoHub"), "stroke", health);
+
+  // -- solar --
+  setText($("rPvVal"), fmtP(pv));
+  setText($("rPvSt"), pv>0.02 ? "Producing" : "Idle");
+  ringWire("rLinePv", pv>0.02, false);
+
+  // -- house --
+  setText($("rLoadVal"), fmtP(load));
+  setText($("rLoadSt"), load>0.02 ? "Using" : "Idle");
+  ringWire("rLineLoad", load>0.02, false);
+
+  // -- grid: import comes in, export goes out --
+  const net = imp-exp;
+  setText($("rGridVal"), fmtP(Math.abs(net)));
+  setText($("rGridSt"), imp>0.02 ? "Importing" : exp>0.02 ? "Exporting" : "Idle");
+  // grid -> hub, so forward means importing; an export runs backwards
+  ringWire("rLineGrid", (imp+exp)>0.02, exp>imp);
+
+  // -- battery: discharge out, charge in --
+  const bnet = dis-chg;
+  setText($("rBatVal"), fmtP(Math.abs(bnet)));
+  setText($("rBatSt"), activity);
+  // hub -> battery, so forward means charging; a discharge runs backwards
+  ringWire("rLineBat", (chg+dis)>0.02, dis>chg);
+  // the ring is a level gauge, coloured by how healthy the pack is
+  setAttr($("rRingBat"), "stroke", health);
+  setAttr($("rRingBat"), "stroke-dasharray", Math.round(lvl)+" 100");
+  setAttr($("rIcoBat"), "stroke", health);
+  // and the icon fills up to the state of charge, left to right
+  if(hasSoc){
+    setAttr($("rBatFill"), "width", String(Math.round(21.6 * lvl/100)));
+    setAttr($("rBatFill"), "fill", health);
+  }
+}
+
+/* Show or hide a flow line, and point it the right way. */
+function ringWire(id, active, reverse){
+  const el = $(id);
+  if(!el) return;
+  if(active !== el.dataset.on){
+    el.dataset.on = active ? "1" : "";
+    el.style.display = active ? "" : "none";
+  }
+  const rev = reverse ? "rev" : "";
+  if(el.dataset.dir !== rev){
+    el.dataset.dir = rev;
+    el.classList.toggle("rev", reverse);
+  }
+}
+
+
+/* ---- slides ------------------------------------------------------------
+   The server owns which slide is showing, so every display - the Pi kiosk,
+   a phone, the ESP32 - shows the same one at the same moment. */
+let LAST_SLIDE = "";
+function applySlide(slide){
+  if(!slide || !slide.name) return;
+  if(slide.name === LAST_SLIDE) return;
+  LAST_SLIDE = slide.name;
+  document.body.dataset.slide = slide.name;
+}
+
+/* ---- the weather slide ------------------------------------------------
+   The icons are drawn here rather than fetched, so the slide needs
+   nothing on disk but the forecast itself. */
+const WX_CLOUD = `<path d="M14 36h20a7 7 0 0 0 1-13.9A10 10 0 0 0 16 24.6 6 6 0 0 0 14 36z" fill="var(--text)" opacity=".92"/>`;
+const WX_SUN = `<circle cx="24" cy="24" r="8.5" fill="var(--pv)"/>
+  <g stroke="var(--pv)" stroke-width="2.4" stroke-linecap="round">
+  <path d="M24 8v5M24 35v5M8 24h5M35 24h5M12.7 12.7l3.5 3.5M31.8 31.8l3.5 3.5M35.3 12.7l-3.5 3.5M16.2 31.8l-3.5 3.5"/></g>`;
+const WX_RAIN = `<g stroke="var(--load)" stroke-width="2.6" stroke-linecap="round"><path d="M17 40l-2 5M25 40l-2 5M33 40l-2 5"/></g>`;
+const WX_DRIZZLE = `<g stroke="var(--load)" stroke-width="2.2" stroke-linecap="round"><path d="M18 39l-1 3M25 39l-1 3M32 39l-1 3"/></g>`;
+const WX_FOG = `<g stroke="var(--muted)" stroke-width="2.4" stroke-linecap="round" opacity=".85"><path d="M10 40h28M13 45h22"/></g>`;
+const WX_SNOW = `<g stroke="#7dd3fc" stroke-width="2.2" stroke-linecap="round"><path d="M17 41v6M14 43h6M25 41v6M22 43h6M33 41v6M30 43h6"/></g>`;
+const WX_SLEET = `<g stroke-linecap="round" stroke-width="2.2"><path d="M17 41v6M14 43h6" stroke="#7dd3fc"/><path d="M25 40l-1 3M32 40l-1 3" stroke="var(--load)"/></g>`;
+const WX_BOLT = `<path d="M26 37l-6 7h5l-2 6 7-8h-5l3-5z" fill="var(--pv)"/>`;
+
+const WX_ICONS = {
+  sun: WX_SUN,
+  partly: `<g transform="translate(-4,-4) scale(.78)">${WX_SUN}</g><g transform="translate(4,5) scale(.92)">${WX_CLOUD}</g>`,
+  cloud: WX_CLOUD,
+  fog: WX_CLOUD + WX_FOG,
+  drizzle: WX_CLOUD + WX_DRIZZLE,
+  rain: WX_CLOUD + WX_RAIN,
+  snow: WX_CLOUD + WX_SNOW,
+  sleet: WX_CLOUD + WX_SLEET,
+  storm: WX_CLOUD + WX_BOLT,
+};
+
+function wxSvg(name){
+  return `<svg viewBox="0 0 48 48" fill="none">${WX_ICONS[name] || WX_ICONS.cloud}</svg>`;
+}
+
+/* Set an icon, but only when it has really changed - the whole slide is
+   redrawn on every live update, and a Pi 3 notices. */
+function setIcon(el, name){
+  if(!el) return;
+  const key = name || "cloud";
+  if(el.dataset.icon === key) return;
+  el.dataset.icon = key;
+  el.innerHTML = wxSvg(key);
+}
+
+function renderWeather(w){
+  const days = (w && w.days) || [];
+  const cur  = (w && w.current) || {};
+  const solar= (w && w.solar) || {};
+  const units= (w && w.units) || {};
+  const windUnit = units.wind || "km/h";
+  const loc = (w && w.location) || {};
+
+  if(!UI.wxBuilt){
+    UI.wxBuilt = true;
+    // The last three are the first to go when the screen is small - the
+    // temperature, the wind and the rain matter more.
+    $("wxKvs").innerHTML = [["Feels like",0],["Wind",0],["Rain now",0],
+                            ["Humidity",1],["Sun",1],["UV index",1]]
+      .map(([k,opt])=>`<div class="kv${opt?" opt":""}"><span class="k">${k}</span><span class="v"></span></div>`).join("");
+    UI.wxKvVals = [...$("wxKvs").querySelectorAll(".v")];
+    $("wxRows").innerHTML = Array.from({length:7},()=>
+      `<div class="sunrow"><span class="d"></span><span class="bar"><i></i></span><span class="v"></span></div>`).join("");
+    UI.wxRows = [...$("wxRows").querySelectorAll(".sunrow")];
+    $("wxDays").innerHTML = Array.from({length:7},()=>
+      `<div class="wday"><span class="d"></span><span class="ic"></span><span class="t"></span><span class="lo"></span><span class="r"></span><span class="wd"></span></div>`).join("");
+    UI.wxDays = [...$("wxDays").querySelectorAll(".wday")];
+  }
+
+  setText($("wxPlace"), loc.name || "");
+  setText($("wxAttribution"), (w && w.attribution) || "");
+
+  const empty = !days.length;
+  setText($("wxTemp"), cur.temperature!=null ? Math.round(cur.temperature)+"°" : "—");
+  setText($("wxText"), empty ? ((w && w.error) || "no forecast") : (cur.text || "—"));
+  setText($("wxWind"), cur.wind!=null
+    ? Math.round(cur.wind)+" "+windUnit+(cur.wind_text?" "+cur.wind_text:"") : "");
+  setIcon($("wxIcon"), empty ? "cloud" : cur.icon);
+
+  const today = days[0] || {};
+  const kvs = [
+    cur.apparent!=null ? Math.round(cur.apparent)+"°" : "—",
+    cur.wind!=null ? Math.round(cur.wind)+" "+windUnit+(cur.wind_text?" "+cur.wind_text:"") : "—",
+    cur.precipitation!=null ? Number(cur.precipitation).toFixed(1)+" mm" : "—",
+    cur.humidity!=null ? Math.round(cur.humidity)+"%" : "—",
+    (today.sunrise && today.sunset) ? today.sunrise+" – "+today.sunset : "—",
+    today.uv!=null ? Number(today.uv).toFixed(1) : "—",
+  ];
+  kvs.forEach((v,i)=> setText(UI.wxKvVals[i], v));
+
+  /* -- the solar forecast --
+     Before the array has been fitted against the inverter's own yield,
+     what the forecast knows is the sun - so that is what is shown. */
+  const calibrated = !!solar.calibrated;
+  const maxPv = Math.max(0.01, ...days.map(d=> (calibrated && d.pv!=null ? Number(d.pv) : Number(d.poa)||0)));
+  days.forEach((d,i)=>{
+    const row = UI.wxRows[i];
+    if(!row) return;
+    setText(row.querySelector(".d"), i===0 ? "Today" : (d.weekday || ""));
+    if(row.classList.contains("first") !== (i===0)) row.classList.toggle("first", i===0);
+    const value = calibrated ? (d.pv!=null ? Number(d.pv) : null) : (d.poa!=null ? Number(d.poa) : null);
+    const bar = row.querySelector(".bar i");
+    if(bar){
+      const width = (value!=null ? (value/maxPv*100) : 0);
+      const shown = width.toFixed(1)+"%";
+      if(bar.style.width !== shown) bar.style.width = shown;
+    }
+    setText(row.querySelector(".v"), value!=null
+      ? value.toFixed(1)+(calibrated ? " kWh" : " kWh/m²") : "—");
+  });
+  for(let i=days.length;i<UI.wxRows.length;i++){
+    const row = UI.wxRows[i];
+    if(row && row.style.display !== "none") row.style.display = "none";
+  }
+  for(let i=0;i<days.length;i++){
+    const row = UI.wxRows[i];
+    if(row && row.style.display) row.style.display = "";
+  }
+
+  setText($("wxCalib"), calibrated ? "kWh, your array" : "kWh/m² of sun");
+  let hint = "";
+  if(calibrated){
+    const kwp = solar.kwp!=null ? Number(solar.kwp).toFixed(1)+" kWp" : "";
+    hint = "array ≈ "+kwp+" · "+(solar.days||0)+" days fitted";
+    if(solar.array_kwp){
+      hint += " · your "+Number(solar.array_kwp).toFixed(1)+" kWp "
+            + (solar.agrees ? "agrees" : "differs - check the roof angle");
+    }
+  }else{
+    hint = (solar.reason || solar.note || "waiting for enough days of your own yield");
+  }
+  setText($("wxHint"), hint);
+
+  /* -- the week ahead -- */
+  days.forEach((d,i)=>{
+    const card = UI.wxDays[i];
+    if(!card) return;
+    setText(card.querySelector(".d"), i===0 ? "Today" : (d.weekday || ""));
+    setIcon(card.querySelector(".ic"), d.icon);
+    setText(card.querySelector(".t"), d.tmax!=null ? Math.round(d.tmax)+"°" : "—");
+    setText(card.querySelector(".lo"), d.tmin!=null ? Math.round(d.tmin)+"°" : "—");
+    setText(card.querySelector(".r"), d.precip_prob ? Math.round(d.precip_prob)+"%" : "");
+    setText(card.querySelector(".wd"),
+      d.wind!=null ? Math.round(d.wind)+" "+windUnit+" "+(d.wind_text||"") : "");
+  });
+  for(let i=days.length;i<UI.wxDays.length;i++){
+    const card = UI.wxDays[i];
+    if(card && card.style.display !== "none") card.style.display = "none";
+  }
+  for(let i=0;i<days.length;i++){
+    const card = UI.wxDays[i];
+    if(card && card.style.display) card.style.display = "";
+  }
+}
+
+/* ---- the usage chart ---------------------------------------------------
+   Half-hourly house usage, recorded locally from the live feed. The shaded
+   bands are the Flux windows: cheap overnight, peak in the evening. */
+function renderUsage(o, mini){
+  let series = ((o && o.series) || []).slice();
+  const bands = (o && o.bands) || [];
+  const bars = $("usageBars"), ticks = $("usageTicks"),
+        bandG = $("usageBands"), nowG = $("usageNow");
+
+  /* The chart is about the grid, because that is what the tariff is
+     about.  The house's own use is on the Today row underneath - and
+     it does not move when the battery covers the house, which is
+     exactly what you would want to see on a chart like this. */
+
+  /* The meter's own half-hourly readings are the authority on what
+     crossed the grid boundary, so where they exist they win over the
+     inverter's estimate. */
+  const meter = (mini && mini.today && mini.today.series) || [];
+  let granularity = (o && o.granularity) || "half_hour";
+  if(meter.length) series = mergeMeter(series, meter, granularity);
+
+  /* The chart is drawn at the size it actually has, rather than being
+     stretched to fit.  Stretching squashes the bars and makes the whole
+     thing look the wrong shape. */
+  const chart = $("usageChart");
+  const box = chart.parentElement;
+  const W = Math.max(240, Math.round(box.clientWidth || 480));
+  const H = Math.max(80, Math.round(box.clientHeight || 162));
+  chart.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const plot = H - 24;              /* the room the tick labels need */
+  const mid = Math.round(plot/2);   /* the zero line: import above, export below */
+  const span = 24*3600*1000;       /* the chart is a timeline of a day */
+  const t0 = Date.now() - span;
+  const slots = granularity === "hour" ? 24 : 48;
+  const slotW = W/slots;
+  const half = 1800*1000;
+
+  const bandHtml = bands.map(b => {
+    const t1 = Date.parse(b.start), t2 = Date.parse(b.end);
+    if(!isFinite(t1)) return "";
+    const x = ((t1 - t0)/span) * W;
+    const x1 = isFinite(t2) ? ((t2 - t0)/span) * W : x + slotW;
+    if(x1 < 0 || x > W) return "";
+    return `<rect x="${x.toFixed(1)}" y="0" width="${Math.max(0,x1-x).toFixed(1)}" height="${plot.toFixed(1)}" fill="${b.fill}"/>`;
+  }).join("");
+  bandG.innerHTML = bandHtml;
+
+  const shown = series.filter(r => r && r.start);
+  const peakIn = Math.max(0, ...shown.map(r => r.grid_in||0));
+  const peakOut = Math.max(0, ...shown.map(r => r.grid_out||0));
+  const max = Math.max(0.25, peakIn, peakOut);
+
+  /* The chart is a timeline of the last 24 hours, so each bar is placed
+     where it actually happened rather than spread evenly.  A history
+     that is only a few hours old then looks like a few hours of a day,
+     which is what it is. */
+  bars.innerHTML = shown.map(r => {
+    const when = Date.parse(r.start);
+    if(!isFinite(when)) return "";
+    const x = ((when - t0)/span) * W;
+    if(x < -slotW || x > W) return "";
+    const w = Math.max(2, slotW-4);
+    const up = Math.round((mid-4) * ((r.grid_in||0)/max));
+    const down = Math.round((plot-mid-4) * ((r.grid_out||0)/max));
+    let out = "";
+    if(up > 0) out += `<rect x="${(x+2).toFixed(1)}" y="${(mid-up).toFixed(1)}" width="${w.toFixed(1)}" height="${up}" rx="2" fill="var(--grid)"/>`;
+    if(down > 0) out += `<rect x="${(x+2).toFixed(1)}" y="${mid}" width="${w.toFixed(1)}" height="${down}" rx="2" fill="var(--bat)"/>`;
+    return out;
+  }).join("");
+
+  // the axis: every six hours
+  const marks = [];
+  for(let h=0; h<=24; h+=6){
+    const t = new Date(t0 + h*3600*1000);
+    const x = (h/24)*W;
+    marks.push(`<text x="${x.toFixed(1)}" y="${(H-6).toFixed(1)}">${t.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</text>`);
+  }
+  ticks.innerHTML = marks.join("");
+
+  /* The vertical scale: what the bars are, and how big the biggest one
+     is.  The chart is energy, so the unit is kWh. */
+  const scale = $("usageScale");
+  if(shown.length){
+    const unit = granularity === "hour" ? "kWh per hour" : "kWh per half hour";
+    const peak = peakIn >= peakOut ? peakIn : peakOut;
+    const peakLabel = peakIn >= peakOut ? "peak import" : "peak export";
+    scale.innerHTML =
+      `<text x="2" y="10">${unit}</text>` +
+      `<text x="${(W-9).toFixed(1)}" y="10" text-anchor="end">${peakLabel} ${fmtP(peak)} kWh</text>`;
+  }else{
+    scale.innerHTML = "";
+  }
+
+  const axis = $("usageAxis");
+  if(axis){ axis.setAttribute("x1", 0); axis.setAttribute("x2", W);
+            axis.setAttribute("y1", mid.toFixed(1));
+            axis.setAttribute("y2", mid.toFixed(1)); }
+
+  nowG.innerHTML = shown.length ? `<line x1="${(W-2).toFixed(1)}" y1="0" x2="${(W-2).toFixed(1)}" y2="${(plot).toFixed(1)}" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+      <circle cx="${(W-2).toFixed(1)}" cy="6" r="3" fill="rgba(255,255,255,.5)"/>` : "";
+
+  $("usageLegend").innerHTML = shown.length
+    ? `<span><i style="background:var(--grid)"></i>grid import</span>
+       <span><i style="background:var(--bat)"></i>grid export</span>
+       <span><i style="background:rgba(125,211,252,.45)"></i>cheap 02:00-05:00</span>
+       <span><i style="background:rgba(240,168,104,.55)"></i>peak 16:00-19:00</span>`
+    : `<span>building history - one half-hour at a time</span>`;
+  // where the numbers came from, so the chart cannot be mistaken for
+  // something it is not
+  $("usageSource").textContent = meter.length
+    ? "from your Octopus meter" : "from the inverter";
+}
+
+/* Put the meter's own readings over the inverter's estimate, where the
+   two cover the same time.  The meter's readings are half-hourly, so
+   on an hourly chart they are added up to their hour. */
+function mergeMeter(series, meter, granularity){
+  const half = 1800*1000;
+  const buckets = {};
+  for(const p of meter){
+    const t = Date.parse(p.t);
+    if(!isFinite(t)) continue;
+    const key = granularity === "hour"
+      ? Math.floor(t/(60*60*1000))*(60*60*1000)
+      : Math.floor(t/half)*half;
+    const b = buckets[key] || (buckets[key] = {grid_in:0, grid_out:0});
+    b.grid_in += p.kwh||0;
+    b.grid_out += p.export_kwh||0;
+  }
+  const out = [];
+  for(const r of series){
+    const t = Date.parse(r.start);
+    if(!isFinite(t)){ out.push(r); continue; }
+    const key = granularity === "hour"
+      ? Math.floor(t/(60*60*1000))*(60*60*1000)
+      : Math.floor(t/half)*half;
+    const b = buckets[key];
+    out.push(b ? Object.assign({}, r, b) : r);
+  }
+  return out;
+}
+
+/* The chart is drawn to fit the box it is in, so it has to be drawn
+   again when that box changes size. */
+let usageRedraw = null;
+window.addEventListener("resize", () => {
+  clearTimeout(usageRedraw);
+  usageRedraw = setTimeout(() => {
+    renderUsage((window.SNAP && window.SNAP.usage) || {},
+                (window.SNAP && window.SNAP.mini) || {});
+  }, 120);
+});
+
+/* ---- today's figures, from the inverter's own daily report --------------- */
+function renderDaily(s){
+  const daily = (s && s.daily) || {};
+  const totals = daily.totals || ((s && s.usage && s.usage.today) || {});
+  const kwh = (k) => totals[k]!=null ? fmtP(totals[k])+" kWh" : "\u2014";
+  const selfUsed = totals.house>0.05
+    ? Math.max(0, Math.min(100, Math.round(100*(totals.house - (totals.grid_in||0))/totals.house)))
+    : null;
+  // "p" is the drop priority: p1 is always shown, p3 goes first when
+  // the panel cannot fit every row.
+  const rows = [
+    ["Solar generated", kwh("pv"), "p1"],
+    ["House used", kwh("house"), "p1"],
+    ["Battery discharged", kwh("batt_out"), "p2"],
+    ["Grid imported", kwh("grid_in"), "p1"],
+    ["Exported", kwh("grid_out"), "p2"],
+    ["Self-used", selfUsed!=null ? selfUsed+" %" : "\u2014", "p2"],
+  ];
+  if(!UI.dailyBuilt){ UI.dailyBuilt = true;
+    $("daily").querySelector("tbody").innerHTML =
+      rows.map(r=>`<tr class="${r[2]}"><td class="k">${r[0]}</td><td class="v"></td></tr>`).join("");
+    UI.dailyVals = [...$("daily").querySelectorAll("td.v")];
+  }
+  rows.forEach((r,i)=> setText(UI.dailyVals[i], r[1]));
+  $("dailyHint").innerHTML = daily.error
+    ? daily.error
+    : (daily.totals
+        ? "From the inverter\u2019s own daily report"
+        : "Waiting for the inverter\u2019s daily report");
+}
+
+/* ---- the Octopus panel ------------------------------------------------- */
+function renderOctopus(o, mini){
+  const rates = (o && o.rates) || {};
+  const meter = (o && o.meter) || {};
+  const live = (mini && mini.live) || {};
+  const miniToday = (mini && mini.today) || {};
+  const band = rates.band || "standard";
+  const bandName = {cheap:"super cheap", peak:"peak", standard:"standard"}[band];
+  const bandTag = band==="cheap" ? "cheap" : band==="peak" ? "peak" : "";
+  $("octTariff").textContent = rates.tariff ? rates.tariff.toUpperCase() : "";
+
+  const bandHtml = `<span class="bandtag ${bandTag}">${bandName}</span>`;
+  const until = rates.band_until
+    ? new Date(rates.band_until).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})
+    : "";
+  // The Mini reads the meter itself, so its figures are live and they win.
+  const miniImport = miniToday.consumption_kwh;
+  const miniExport = miniToday.export_kwh;
+  const imported = miniImport!=null ? miniImport : meter.imported_kwh;
+  const exported = miniExport!=null ? miniExport : meter.exported_kwh;
+  const demand = live.demand_w;
+  const tiles = [
+    {k:"Import rate", c:"var(--muted)", v:fmtP(rates.import_p_kwh),
+     u: rates.import_p_kwh!=null ? "p" : "",
+     n: rates.import_p_kwh!=null ? (until ? bandName+" \u00b7 to "+until : bandName) : "not set",
+     band: bandTag, tag:true},
+    {k:"Export rate", c:"var(--flux)", v:fmtP(rates.export_p_kwh),
+     u: rates.export_p_kwh!=null ? "p" : "",
+     n: rates.export_p_kwh!=null ? (until ? bandName+" \u00b7 to "+until : bandName) : "not set",
+     band: bandTag, tag:true},
+    {k:"Imported", c:"var(--grid)", v:fmtP(imported),
+     u: imported!=null ? "kWh" : "",
+     n: miniImport!=null
+        ? "\u00a3"+(miniToday.cost!=null ? miniToday.cost.toFixed(2) : "0.00")
+          + (miniToday.partial ? " so far" : " live")
+        : (meter.import_cost!=null
+        ? "\u00a3"+meter.import_cost.toFixed(2)
+          +(meter.import_source==="inverter" ? " estimated" : " paid")
+        : (o && o.error ? "unavailable" : "no meter data"))},
+    {k:"Exported", c:"var(--bat)", v:fmtP(exported),
+     u: exported!=null ? "kWh" : "",
+     n: miniExport!=null
+        ? "live from the meter"
+        : (meter.export_earning!=null
+        ? "\u00a3"+meter.export_earning.toFixed(2)
+          +(meter.export_source==="inverter" ? " estimated" : " earned")
+        : (o && o.error ? "unavailable" : "no meter data"))},
+  ];
+  $("octTiles").innerHTML = tiles.map(t=>
+    `<div class="tile"><div class="k"><span class="swatch" style="background:${t.c}"></span>${t.k}</div>
+     <div class="v">${t.v}${t.u?`<small>${t.u}</small>`:""}</div>
+     <div class="note ${t.band||""}">${t.n}</div></div>`).join("");
+
+  const prem = rates.export_premium_p_kwh;
+  const haveKey = (SNAP && SNAP.settings && SNAP.settings.octopus
+                   && SNAP.settings.octopus.api_key);
+  const stale = meter.last_reading_age_h!=null && meter.last_reading_age_h>6;
+  const age = meter.last_reading_age_h!=null
+    ? (meter.last_reading_age_h<48
+        ? Math.round(meter.last_reading_age_h)+" hours ago"
+        : Math.round(meter.last_reading_age_h/24)+" days ago")
+    : "";
+  const pill = $("octLive");
+  if (demand!=null){
+    pill.hidden = false;
+    // a live draw is usually small, so watts read better than 0.02 kW
+    const live = demand>=1000
+      ? fmtP(demand/1000) + " kW"
+      : Math.round(demand) + " W";
+    pill.textContent = "\u25cf " + live + " now";
+  } else {
+    pill.hidden = true;
+  }
+  $("octHint").innerHTML = demand!=null
+    ? "live from your Octopus Mini"
+    : (mini && mini.error)
+    ? "mini: " + mini.error
+    : (o && o.error)
+    ? o.error
+    : (meter.imported_kwh==null && !haveKey)
+      ? "The rates are public - add an API key for your meter readings"
+    : (meter.imported_kwh==null)
+      ? "No meter readings yet - check the API key and account number"
+    : (meter.source==="inverter")
+      ? `Estimated from the inverter - the meter's last reading was ${age}`
+    : (stale)
+      ? `The meter's last reading was ${age}`
+    : (prem!=null && prem!==0)
+      ? `Export now earns <b>${prem>0?"+":""}${prem.toFixed(2)}p</b> ${prem>0?"above":"below"} the standard rate`
+      : (rates.band_until ? `band until ${new Date(rates.band_until).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}` : "");
+}
+
+/* ---- today's figures, derived from the local half-hour history --------- */
+function renderToday(o){
+  const t = (o && o.today) || {};
+  const OCT = (window.SNAP && window.SNAP.octopus) || {};
+  const MINI = (window.SNAP && window.SNAP.mini) || {};
+  const miniToday = MINI.today || {};
+  const g = (k, d) => (t[k]!=null ? fmtP(t[k]) : "\u2014");
+  /* The share of the solar that stayed on site.  The old figure was
+     (house - grid in) / house, which collapses to zero whenever the
+     battery is charged from the grid - the opposite of the truth. */
+  const solar = t.pv||0;
+  const kept = solar>0.05 ? Math.max(0, Math.min(100,
+      Math.round(100*(solar - (t.grid_out||0))/solar))) : null;
+  const tiles = [
+    {k:"Solar", c:"var(--pv)", v:g("pv"), u:"kWh", n:"generated"},
+    {k:"House", c:"var(--load)", v:g("house"), u:"kWh", n:"used"},
+    {k:"Battery", c:"var(--bat)", v:g("batt_out"), u:"kWh", n:"discharged"},
+    {k:"Grid", c:"var(--grid)", v:g("grid_in"), u:"kWh", n:"imported"},
+    {k:"Self-used", c:"var(--flux)", v:kept!=null?kept:"\u2014", u:"%",
+     n:"of your solar"},
+    {k:"Cost today", c:"var(--flux)",
+     v:(miniToday.cost!=null) ? "\u00a3"+miniToday.cost.toFixed(2)
+        : (OCT.cost!=null) ? "\u00a3"+OCT.cost.toFixed(2) : "\u2014",
+     n:(miniToday.cost!=null) ? "live from the meter"
+        : (OCT.cost!=null) ? (OCT.cost<0 ? "credit balance" : "so far") : "meter"},
+  ];
+  $("todayTiles").innerHTML = tiles.map(t=>
+    `<div class="tile"><div class="k"><span class="swatch" style="background:${t.c}"></span>${t.k}</div>
+     <div class="v">${t.v}${t.u?`<small>${t.u}</small>`:""}</div><div class="note">${t.n}</div></div>`).join("");
+}
+
+function connect(){
+  const es = new EventSource("/events");
+  es.onmessage = e => { sseOk=true; try{ render(JSON.parse(e.data)); }catch(_){} };
+  es.onerror = () => {
+    sseOk = false;
+    $("liveStatus").textContent = "reconnecting…";
+  };
+}
+// The event stream is the primary transport. Polling is only a fallback, so
+// it stops as soon as the stream is healthy - two fetches a second on a
+// Pi 3 is not free.
+function poll(){
+  fetch("/api/state").then(r=>r.json()).then(render).catch(()=>{});
+}
+connect();
+let pollMs = (CFG.display && CFG.display.poll_ms) || 1000;
+setInterval(()=>{ if(!sseOk) poll(); }, 2000);
+matchMedia("(prefers-color-scheme: light)").addEventListener("change", applyDisplay);
+fetch("/api/state").then(r=>r.json()).then(render).catch(()=>{});
+</script>
+</body>
+</html>

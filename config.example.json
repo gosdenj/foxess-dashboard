@@ -1,0 +1,59 @@
+{
+  "foxess": {
+    "user": "you@example.com",
+    "password": "",
+    "api_key": "",
+    "domain": "https://www.foxesscloud.com",
+    "sn": "",
+    "plant_id": ""
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8765,
+    "auto_open": false
+  },
+  "api_interval": 300,
+  "live_enabled": true,
+  "api_enabled": true,
+  "octopus": {
+    "api_key": "",
+    "email": "",
+    "password": "",
+    "account_number": "",
+    "mpan": "",
+    "meter_serial": "",
+    "export_mpan": "",
+    "export_meter_serial": "",
+    "tariff": "flux"
+  },
+  "display": {
+    "theme": "dark",
+    "units": "kW",
+    "clock": "24h",
+    "timezone": "auto",
+    "layout": "auto",
+    "diagram": "rings",
+    "show_totals": true,
+    "show_system": true,
+    "show_soc": true,
+    "poll_ms": 1000,
+    "slides": [
+      "power",
+      "usage",
+      "weather"
+    ],
+    "slide_interval": 20,
+    "rotate_ip": ""
+  },
+  "weather": {
+    "location": "",
+    "latitude": "",
+    "longitude": "",
+    "temperature_unit": "celsius",
+    "wind_speed_unit": "kmh",
+    "tilt": 35,
+    "azimuth": 0,
+    "performance_ratio": 0.85,
+    "array_kwp": ""
+  }
+}

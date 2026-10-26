@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FoxESS Settings</title>
+<style>
+:root{
+  --bg:#0a0e16; --panel:#111827; --panel2:#0f1622; --line:rgba(255,255,255,.08);
+  --text:#e5e9f0; --muted:#8b97ab; --dim:#5d6a80;
+  --pv:#f5b642; --load:#4a9eff; --grid:#a78bfa; --bat:#34d399; --alarm:#f87171;
+  --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",
+            "Liberation Sans","DejaVu Sans","Noto Sans",Arial,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,
+              "Liberation Mono","DejaVu Sans Mono","Noto Sans Mono",monospace;
+}
+html[data-theme="light"]{
+  --bg:#f2f4f8; --panel:#fff; --panel2:#f7f9fc; --line:rgba(15,23,42,.12);
+  --text:#16202f; --muted:#5a6a80; --dim:#8a97a8;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+     font-family:var(--font-ui);
+     font-size:15px;
+     font-weight:400;
+     line-height:1.5;
+     -webkit-font-smoothing:antialiased;
+     -moz-osx-font-smoothing:grayscale}
+.wrap{max-width:860px;margin:0 auto;padding:26px 18px 70px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:22px;flex-wrap:wrap}
+h1{font-size:21px;margin:0;font-weight:650}
+h1 a{color:inherit;text-decoration:none}
+h1 a:hover{color:var(--load)}
+h2{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+   margin:0 0 14px;font-weight:600}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+        padding:18px 20px;margin-bottom:16px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}
+input[type=text],input[type=password],input[type=number],select{
+  width:100%;padding:9px 11px;border-radius:9px;background:var(--panel2);
+  border:1px solid var(--line);color:var(--text);font-size:14px;font-family:var(--font-mono)}
+input:focus,select:focus{outline:none;border-color:var(--load)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.field{margin-bottom:14px}
+.field:last-child{margin-bottom:0}
+.hint{color:var(--dim);font-size:12px;margin-top:5px;line-height:1.5}
+.opt{color:var(--dim);font-weight:400;font-size:11px;letter-spacing:.04em}
+.check{display:flex;align-items:center;gap:9px;margin-bottom:11px;font-size:14px;color:var(--text)}
+.check input{width:17px;height:17px;accent-color:var(--bat);cursor:pointer}
+.check:last-child{margin-bottom:0}
+.secre Row{display:flex;gap:8px}
+.secretRow{display:flex;gap:8px;align-items:stretch}
+.secretRow input{flex:1 1 auto}
+.secretRow button{flex:none;padding:0 12px;border-radius:9px;background:var(--panel2);
+  border:1px solid var(--line);color:var(--muted);cursor:pointer;font-size:13px}
+.secretRow button:hover{color:var(--text)}
+button.primary{background:var(--load);border:0;color:#04101f;font-weight:650;padding:11px 22px;
+  border-radius:10px;cursor:pointer;font-size:14px}
+button.primary:hover{filter:brightness(1.08)}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--muted);
+  padding:11px 18px;border-radius:10px;cursor:pointer;font-size:14px}
+button.ghost:hover{color:var(--text);border-color:var(--muted)}
+button:disabled{opacity:.4;cursor:default;pointer-events:none}
+button:disabled:hover{color:var(--muted);border-color:var(--line);filter:none}
+button.primary.dirty{box-shadow:0 0 0 2px rgba(74,158,255,.28)}
+.dirtyDot{display:none;width:7px;height:7px;border-radius:50%;background:var(--pv);
+  align-self:center;margin-right:-6px}
+.actions.has-changes .dirtyDot{display:inline-block}
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+        position:sticky;bottom:0;background:var(--bg);padding:16px 0 8px;
+        border-top:1px solid var(--line);margin-top:6px}
+.msg{font-size:13px;padding:10px 13px;border-radius:9px;flex:1 1 220px}
+.msg.ok{background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);color:#6ee7b7}
+.msg.err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#fca5a5}
+.slideRow{display:flex;align-items:center;gap:10px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:6px}
+.slideRow input[type=checkbox]{width:16px;height:16px;accent-color:var(--load);flex:none}
+.slideName{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.slideName b{font-size:14px;font-weight:600}
+.slideName span{color:var(--dim);font-size:12px}
+.mini{background:var(--panel);border:1px solid var(--line);color:var(--muted);
+  width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:12px;line-height:1;
+  padding:0;flex:none}
+.mini:hover:not(:disabled){color:var(--text);border-color:var(--muted)}
+.mini:disabled{opacity:.35;cursor:default}
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;
+  background:var(--panel2);border:1px solid var(--line);color:var(--muted);margin-left:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td{padding:5px 0;color:var(--muted)}
+td.v{text-align:right;font-family:var(--font-mono);color:var(--text)}
+code{font-family:var(--font-mono);background:var(--panel2);padding:1px 5px;border-radius:4px;
+     font-size:12px;color:#9fb0c9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><a href="/">← FoxESS</a> &nbsp;Settings</h1>
+    <div style="flex:1"></div>
+    <span class="badge" id="cfgPath">…</span>
+  </header>
+
+  <section>
+    <h2>Power flow diagram</h2>
+    <div class="grid">
+      <div class="field">
+        <label for="diagram">Style</label>
+        <select id="diagram">
+          <option value="rings">Rings — inverter in the middle, solar / house / grid / battery around it</option>
+          <option value="flow">Flow — a compact left-to-right diagram</option>
+        </select>
+        <div class="hint">This is the big diagram at the top of the dashboard.
+          <a href="/" target="_blank">Open the dashboard</a> to see the change.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>FoxESS account</h2>
+    <div class="grid">
+      <div class="field">
+        <label for="user">Email / username</label>
+        <input type="text" id="user" autocomplete="username" placeholder="you@example.com">
+        <div class="hint">Used for the WebSocket session. Not the API key.</div>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="secretRow">
+          <input type="password" id="password" autocomplete="current-password" placeholder="••••••••">
+          <button type="button" onclick="reveal('password')">Show</button>
+        </div>
+        <div class="hint">MD5-hashed locally, exactly like Fox's own client. Leave blank to keep the stored value.</div>
+      </div>
+      <div class="field">
+        <label for="api_key">Open API key</label>
+        <div class="secretRow">
+          <input type="password" id="api_key" autocomplete="off" placeholder="••••••••">
+          <button type="button" onclick="reveal('api_key')">Show</button>
+        </div>
+        <div class="hint">From the FoxCloud OpenPlatform → API Keys. Needed for the cumulative totals.</div>
+      </div>
+      <div class="field">
+        <label for="domain">Region domain</label>
+        <select id="domain">
+          <option value="https://www.foxesscloud.com">Europe — www.foxesscloud.com</option>
+          <option value="https://portal.foxesscloud.us">USA — portal.foxesscloud.us</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sn">Inverter serial number</label>
+        <input type="text" id="sn" placeholder="auto-detected">
+      </div>
+      <div class="field">
+        <label for="plant_id">Power station id</label>
+        <input type="text" id="plant_id" placeholder="auto-detected">
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Octopus Energy</h2>
+    <div class="grid">
+      <div class="field">
+        <label for="octopus_api_key">API key</label>
+        <div class="secretRow">
+          <input type="password" id="octopus_api_key" autocomplete="off" placeholder="not set">
+          <button type="button" onclick="reveal('octopus_api_key')">Show</button>
+        </div>
+        <div class="hint">From Octopus &rarr; Developer. Reads your meter,
+          and gives the Octopus Mini its live figures. Stored on this
+          machine, never sent anywhere else.</div>
+        <button type="button" class="ghost" onclick="copySecret('octopus.api_key')"
+          style="margin-top:6px">Copy the API key</button>
+      </div>
+      <div class="field">
+        <label for="octopus_account_number">Account number</label>
+        <input type="text" id="octopus_account_number" placeholder="A-7C4E91B2">
+        <div class="hint">The meter point and meter serial are looked up from
+          this, so it is the only thing you have to find.</div>
+        <button type="button" class="ghost" onclick="copySecret('octopus.account_number')"
+          style="margin-top:6px">Copy the account number</button>
+      </div>
+      <div class="field">
+        <label for="octopus_email">Account email <span class="opt">optional</span></label>
+        <input type="text" id="octopus_email" autocomplete="off" placeholder="you@example.com">
+        <div class="hint">The API key above is normally enough for the
+          <b>Octopus Mini</b>, which reads the meter itself and so gives
+          live figures. Fill these in only if the API key does not work
+          &mdash; that route sometimes wants a CAPTCHA.</div>
+      </div>
+      <div class="field">
+        <label for="octopus_password">Account password <span class="opt">optional</span></label>
+        <div class="secretRow">
+          <input type="password" id="octopus_password" autocomplete="off" placeholder="not set">
+          <button type="button" onclick="reveal('octopus_password')">Show</button>
+        </div>
+        <div class="hint">Used once to get a session token, then forgotten.
+          Stored on this machine with the other secrets.</div>
+      </div>
+      <div class="field">
+        <label for="octopus_tariff">Tariff</label>
+        <select id="octopus_tariff">
+          <option value="flux">Octopus Flux</option>
+          <option value="agile">Agile Octopus</option>
+        </select>
+        <div class="hint">The rates are public - they show without an API key.</div>
+      </div>
+      <div class="field">
+        <label for="octopus_mpan">MPAN</label>
+        <input type="text" id="octopus_mpan" placeholder="found from the account number">
+        <div class="hint">Only needed if the lookup cannot find it.</div>
+      </div>
+      <div class="field">
+        <label for="octopus_meter_serial">Meter serial</label>
+        <input type="text" id="octopus_meter_serial" placeholder="found from the account number">
+      </div>
+      <div class="field">
+        <label for="octopus_export_mpan">Export MPAN</label>
+        <input type="text" id="octopus_export_mpan" placeholder="only if you have one">
+        <div class="hint">Leave this empty unless your account has a separate
+          export meter point &mdash; the Detected table below says whether it
+          does. Most homes measure the export with the inverter instead, and
+          then the export figure comes from there.</div>
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="ghost" onclick="testOctopus()">Save and test</button>
+      <span id="octopusTest" style="font-size:13px;color:var(--muted)"></span>
+    </div>
+  </section>
+
+
+  <section>
+    <h2>Data sources</h2>
+    <div class="check"><input type="checkbox" id="live_enabled">
+      <span>Live WebSocket feed <span class="badge">~5 s</span></span></div>
+    <div class="check"><input type="checkbox" id="api_enabled">
+      <span>Open API totals <span class="badge">~5 min</span></span></div>
+    <div class="field" style="max-width:280px;margin-top:14px">
+      <label for="api_interval">Open API poll interval (seconds)</label>
+      <input type="number" id="api_interval" min="30" max="3600" step="30">
+      <div class="hint">The datalogger only uploads every ~300 s, so polling faster gains nothing.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Display</h2>
+    <div class="grid">
+      <div class="field">
+        <label for="theme">Theme</label>
+        <select id="theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+          <option value="auto">Follow the system</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="units">Power units</label>
+        <select id="units">
+          <option value="kW">kW</option>
+          <option value="W">W</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="clock">Clock</label>
+        <select id="clock">
+          <option value="24h">24-hour</option>
+          <option value="12h">12-hour</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="timezone">Timezone</label>
+        <input type="text" id="timezone" placeholder="auto">
+        <div class="hint">IANA name, e.g. <code>Europe/London</code>. Leave as <code>auto</code> for the browser's.</div>
+      </div>
+      <div class="field">
+        <label for="layout">Layout</label>
+        <select id="layout">
+          <option value="auto">Auto (fit the screen)</option>
+          <option value="full">Full</option>
+          <option value="compact">Compact</option>
+          <option value="tiny">Tiny</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="poll_ms">Fallback poll interval (ms)</label>
+        <input type="number" id="poll_ms" min="500" max="60000" step="500">
+        <div class="hint">Only used if the live event stream drops.</div>
+      </div>
+    </div>
+    <div class="check" style="margin-top:14px">
+      <input type="checkbox" id="show_totals"><span>Show energy totals panel</span></div>
+    <div class="check"><input type="checkbox" id="show_system"><span>Show system panel</span></div>
+    <div class="check"><input type="checkbox" id="show_soc"><span>Show battery gauge</span></div>
+  </section>
+
+
+  <section>
+    <h2>Weather &amp; solar forecast</h2>
+    <div class="grid">
+      <div class="field">
+        <label for="wx_location">Place</label>
+        <div class="secretRow">
+          <input type="text" id="wx_location" placeholder="e.g. Welwyn Garden City">
+          <button type="button" onclick="findPlace()">Find</button>
+        </div>
+        <div class="hint">The nearest town in the gazetteer. A hamlet or a street
+          will not be found - use the town nearby.</div>
+        <div id="wxPlaces" style="margin-top:8px"></div>
+      </div>
+      <div class="field">
+        <label for="wx_latitude">Latitude</label>
+        <input type="text" id="wx_latitude" placeholder="51.80" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="wx_longitude">Longitude</label>
+        <input type="text" id="wx_longitude" placeholder="-0.21" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="wx_temperature_unit">Temperature</label>
+        <select id="wx_temperature_unit">
+          <option value="celsius">Celsius (°C)</option>
+          <option value="fahrenheit">Fahrenheit (°F)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="wx_wind_speed_unit">Wind speed</label>
+        <select id="wx_wind_speed_unit">
+          <option value="kmh">Kilometres per hour</option>
+          <option value="ms">Metres per second</option>
+          <option value="mph">Miles per hour</option>
+          <option value="kn">Knots</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="wx_azimuth">Which way the panels face</label>
+        <select id="wx_azimuth">
+          <option value="0">South</option>
+          <option value="45">South-west</option>
+          <option value="90">West</option>
+          <option value="135">North-west</option>
+          <option value="180">North</option>
+          <option value="-45">South-east</option>
+          <option value="-90">East</option>
+          <option value="-135">North-east</option>
+        </select>
+        <div class="hint">South collects the most. This is what turns the
+          forecast's sun into your roof's sun.</div>
+      </div>
+      <div class="field">
+        <label for="wx_tilt">Roof tilt (degrees)</label>
+        <input type="number" id="wx_tilt" min="0" max="90" step="5">
+        <div class="hint">From the flat. About 35° collects the most in Britain.</div>
+      </div>
+      <div class="field">
+        <label for="wx_performance_ratio">Performance ratio</label>
+        <input type="number" id="wx_performance_ratio" min="0.5" max="0.99" step="0.01">
+        <div class="hint">How much of the sun the array collects, once the
+          heat, the cabling and the dirt have taken their cut. 0.85 is a good
+          default, and it only affects the kWp estimate - the forecast itself
+          is measured against your own yield.</div>
+      </div>
+      <div class="field">
+        <label for="wx_array_kwp">Array size (kWp) <span class="opt">optional</span></label>
+        <input type="text" id="wx_array_kwp" placeholder="5.5" inputmode="decimal">
+        <div class="hint">Only if you know it. The dashboard works it out for
+          itself, and this is used to check the answer — the Detected table
+          then says whether the two agree.</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="ghost" onclick="testWeather()">Save and test the forecast</button>
+    </div>
+    <div class="hint" id="wxTest" style="margin-top:10px"></div>
+  </section>
+
+  <section>
+    <h2>Slides</h2>
+    <div class="grid">
+      <div class="field">
+        <label for="slide_interval">Rotate every</label>
+        <input type="number" id="slide_interval" min="0" max="600" step="5">
+        <div class="hint">Seconds. 0 turns the rotation off and shows the
+          first slide only.</div>
+      </div>
+    </div>
+    <div id="slideList" style="margin-top:6px"></div>
+    <div class="hint" id="slideNow" style="margin-top:10px"></div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="ghost" onclick="jumpSlide()">Jump to the next slide</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Detected</h2>
+    <table><tbody id="detected"><tr><td>…</td><td class="v"></td></tr></tbody></table>
+    <div class="hint" style="margin-top:12px">
+      These are read from the cloud, not stored here. Saving your credentials triggers a
+      fresh detection — the serial and plant id above are filled in for you.
+    </div>
+  </section>
+
+  <div class="actions">
+    <button class="primary" id="btnSave" onclick="save()">Save settings</button>
+    <button class="ghost" onclick="exportSettings()">Export</button>
+    <button class="ghost" onclick="importSettings()">Import</button>
+    <button class="ghost" id="btnDiscard" onclick="reload()" disabled
+            title="Put every field back to the last saved value">Discard changes</button>
+    <span class="dirtyDot" title="You have unsaved changes"></span>
+    <div class="msg" id="msg" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const KEEP = "__KEEP__";
+const MASK = "********";
+let CURRENT = {};
+
+/* The settings API speaks the same dotted paths as foxess/config.py - the
+   same ones in EDITABLE and SECRET_PATHS. Element ids stay short, but every
+   field has to declare where it actually lives in the config, otherwise
+   ConfigStore.save() silently drops it. */
+const TEXT_FIELDS = {
+  user:"foxess.user", sn:"foxess.sn", plant_id:"foxess.plant_id",
+  domain:"foxess.domain", timezone:"display.timezone", layout:"display.layout",
+  theme:"display.theme", units:"display.units", clock:"display.clock",
+  diagram:"display.diagram",
+  octopus_account_number:"octopus.account_number",
+  octopus_email:"octopus.email",
+  octopus_tariff:"octopus.tariff",
+  octopus_mpan:"octopus.mpan",
+  octopus_meter_serial:"octopus.meter_serial",
+  octopus_export_mpan:"octopus.export_mpan",
+  wx_location:"weather.location",
+  wx_temperature_unit:"weather.temperature_unit",
+  wx_wind_speed_unit:"weather.wind_speed_unit",
+};
+const NUM_FIELDS  = {api_interval:"api_interval", poll_ms:"display.poll_ms",
+                     slide_interval:"display.slide_interval",
+                     wx_latitude:"weather.latitude",
+                     wx_longitude:"weather.longitude",
+                     wx_tilt:"weather.tilt", wx_azimuth:"weather.azimuth",
+                     wx_performance_ratio:"weather.performance_ratio",
+                     wx_array_kwp:"weather.array_kwp"};
+const BOOL_FIELDS = {
+  live_enabled:"live_enabled", api_enabled:"api_enabled",
+  show_totals:"display.show_totals", show_system:"display.show_system",
+  show_soc:"display.show_soc",
+};
+const SECRET_FIELDS = {password:"foxess.password", api_key:"foxess.api_key",
+                       octopus_api_key:"octopus.api_key",
+                       octopus_password:"octopus.password"};
+
+/* Every field and where it lives, for the import button. */
+const FIELD_MAP = Object.assign({}, TEXT_FIELDS, NUM_FIELDS, BOOL_FIELDS,
+                                SECRET_FIELDS);
+
+/* The slides, and the order they can be picked in. */
+const SLIDES = [
+  ["power",  "Power",  "the FoxESS diagram, live figures and energy totals"],
+  ["usage",  "Usage",  "half-hourly usage, Octopus rates and today's totals"],
+  ["weather","Weather","right now, the solar forecast and the week ahead"],
+];
+let SLIDE_ON = {}, SLIDE_ORDER = [];
+
+function renderSlides(names){
+  const saved = Array.isArray(names) ? names.slice() : SLIDES.map(x=>x[0]);
+  SLIDE_ORDER = SLIDES.map(x=>x[0]).filter(id=>saved.includes(id));
+  saved.forEach(id=>{ if(!SLIDE_ORDER.includes(id)) SLIDE_ORDER.push(id); });
+  SLIDE_ON = {};
+  SLIDE_ORDER.forEach(id=>SLIDE_ON[id]=true);
+  paintSlides();
+}
+
+function paintSlides(){
+  $("slideList").innerHTML = SLIDE_ORDER.map((id,i)=>{
+    const meta = SLIDES.find(x=>x[0]===id) || [id,id,""];
+    return `<div class="slideRow">
+      <input type="checkbox" id="sl_${id}" ${SLIDE_ON[id]?"checked":""}
+             onchange="SLIDE_ON['${id}']=this.checked">
+      <span class="slideName"><b>${meta[1]}</b><span>${meta[2]}</span></span>
+      <button class="mini" onclick="moveSlide('${id}',-1)" ${i===0?"disabled":""}>&uarr;</button>
+      <button class="mini" onclick="moveSlide('${id}',1)"
+              ${i===SLIDE_ORDER.length-1?"disabled":""}>&darr;</button>
+    </div>`;
+  }).join("");
+}
+
+function moveSlide(id, dir){
+  const i = SLIDE_ORDER.indexOf(id), j = i+dir;
+  if(j<0 || j>=SLIDE_ORDER.length) return;
+  [SLIDE_ORDER[i],SLIDE_ORDER[j]] = [SLIDE_ORDER[j],SLIDE_ORDER[i]];
+  paintSlides();
+}
+
+function currentSlides(){ return SLIDE_ORDER.filter(id=>SLIDE_ON[id]); }
+
+function fillOctopusFields(settings){
+  /* The meter point is found by the test, so the fields have to be
+     filled in with what it found - otherwise the page still shows the
+     empty boxes it started with. */
+  if(!settings) return;
+  const map = {octopus_api_key:"api_key", octopus_account_number:"account_number",
+               octopus_mpan:"mpan", octopus_meter_serial:"meter_serial",
+               octopus_export_mpan:"export_mpan",
+               octopus_export_meter_serial:"export_meter_serial",
+               octopus_tariff:"tariff"};
+  for(const [id,key] of Object.entries(map)){
+    const el = $(id);
+    if(!el) continue;
+    const value = settings.octopus ? settings.octopus[key] : undefined;
+    if(value !== undefined && value !== null) el.value = value;
+  }
+}
+
+async function copySecret(path){
+  try{
+    const r = await fetch("/api/settings/export");
+    const j = await r.json();
+    const value = path.split(".").reduce((o,k)=> (o||{})[k], j.settings);
+    if(!value){ out2("nothing saved for " + path); return; }
+    await navigator.clipboard.writeText(value);
+    out2("copied " + path + " to the clipboard");
+  }catch(e){ out2("could not copy: " + e); }
+}
+
+function out2(text){
+  const el = $("msg");
+  if(!el) return;
+  el.style.display = "block";
+  el.textContent = text;
+}
+
+async function exportSettings(){
+  if(!confirm("This downloads your API key and password in plain text.\n"
+    + "Keep the file safe, and delete it afterwards.")) return;
+  const r = await fetch("/api/settings/export");
+  const j = await r.json();
+  const blob = new Blob([JSON.stringify(j.settings, null, 2)],
+                        {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "foxess-dashboard-settings.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  out2("saved foxess-dashboard-settings.json");
+}
+
+function importSettings(){
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json,.json";
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if(!file) return;
+    try{
+      const j = JSON.parse(await file.text());
+      const settings = j.settings || j;
+      let n = 0;
+      for(const [id, path] of Object.entries(FIELD_MAP)){
+        const value = path.split(".").reduce((o,k)=> (o||{})[k], settings);
+        const el = $(id);
+        if(el && value !== undefined && value !== null){
+          el.value = value;
+          n++;
+        }
+      }
+      updateDirtyState();
+      out2("filled in " + n + " fields - press Save settings to keep them");
+    }catch(e){ out2("could not read that file: " + e); }
+  };
+  input.click();
+}
+
+async function testOctopus(){
+  const out = $("octopusTest");
+  out.style.color = "var(--muted)";
+  out.textContent = "Testing…";
+  const settings = {
+    api_key: $("octopus_api_key").value,
+    account_number: $("octopus_account_number").value,
+    email: $("octopus_email").value,
+    password: $("octopus_password").value,
+    mpan: $("octopus_mpan").value,
+    meter_serial: $("octopus_meter_serial").value,
+    export_mpan: $("octopus_export_mpan").value,
+    tariff: $("octopus_tariff").value,
+  };
+  try{
+    const r = await fetch("/api/octopus/test",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({settings: settings})});
+    const j = await r.json();
+    // The meter point is filled in whatever the outcome - the test
+    // still found it even when there are no readings for today, and
+    // that is the usual case with a meter that is a day behind.
+    fillOctopusFields(j.settings);
+    if(j.ok){
+      out.style.color = "#6ee7b7";
+      out.textContent = "OK - " + j.message
+        + " - saved, the dashboard will pick it up now";
+    }else{
+      out.style.color = "#fca5a5";
+      out.textContent = j.message || "the test failed";
+    }
+  }catch(e){
+    out.style.color = "#fca5a5";
+    out.textContent = String(e);
+  }
+}
+
+/* Look the place up.  Only towns and villages are in the gazetteer, so
+   the list of what was found is shown and the user picks. */
+async function findPlace(){
+  const name = $("wx_location").value.trim();
+  const box = $("wxPlaces");
+  if(!name){ box.innerHTML = ""; out2("type a place name first"); return; }
+  box.innerHTML = `<div class="hint">Looking for "${name}"…</div>`;
+  try{
+    const r = await fetch("/api/weather/locate",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name: name})});
+    const j = await r.json();
+    if(!j.ok || !j.places || !j.places.length){
+      box.innerHTML = `<div class="hint" style="color:#fca5a5">${
+        (j && j.message) || "nothing was found"}</div>`;
+      return;
+    }
+    box.innerHTML = j.places.map((p,i)=>
+      `<button class="ghost" style="display:block;width:100%;text-align:left;margin-bottom:6px"
+        onclick="usePlace(${i})">${p.name}${p.admin?", "+p.admin:""}${
+        p.country?", "+p.country:""}<br><span style="color:var(--dim);font-size:12px">${
+        Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}</span></button>`).join("");
+    box.dataset.places = JSON.stringify(j.places);
+  }catch(e){
+    box.innerHTML = `<div class="hint" style="color:#fca5a5">${e}</div>`;
+  }
+}
+
+function usePlace(index){
+  const places = JSON.parse($("wxPlaces").dataset.places || "[]");
+  const p = places[index];
+  if(!p) return;
+  $("wx_location").value = p.name + (p.admin ? ", "+p.admin : "");
+  $("wx_latitude").value = Number(p.latitude).toFixed(4);
+  $("wx_longitude").value = Number(p.longitude).toFixed(4);
+  $("wxPlaces").innerHTML = "";
+  updateDirtyState();
+  out2("picked " + p.name + " - press Save settings to keep it");
+}
+
+function weatherSettings(){
+  return {
+    location: $("wx_location").value,
+    latitude: $("wx_latitude").value,
+    longitude: $("wx_longitude").value,
+    temperature_unit: $("wx_temperature_unit").value,
+    wind_speed_unit: $("wx_wind_speed_unit").value,
+    tilt: $("wx_tilt").value,
+    azimuth: $("wx_azimuth").value,
+    performance_ratio: $("wx_performance_ratio").value,
+    array_kwp: $("wx_array_kwp").value,
+  };
+}
+
+async function testWeather(){
+  const out = $("wxTest");
+  out.style.color = "var(--muted)";
+  out.textContent = "Fetching the forecast…";
+  try{
+    const r = await fetch("/api/weather/test",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({settings: weatherSettings()})});
+    const j = await r.json();
+    if(j.ok){
+      out.style.color = "#6ee7b7";
+      out.textContent = j.message;
+    }else{
+      out.style.color = "#fca5a5";
+      out.textContent = j.message || "the test failed";
+    }
+  }catch(e){
+    out.style.color = "#fca5a5";
+    out.textContent = String(e);
+  }
+}
+
+async function jumpSlide(){
+  const slides = currentSlides();
+  if(!slides.length) return;
+  const r = await fetch("/api/slide",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name:slides[0]})});
+  const j = await r.json();
+  showSlideNow(j.slide && j.slide.name);
+}
+
+function showSlideNow(name){
+  $("slideNow").textContent = name
+    ? "Showing now: "+name+" - the dashboard and the Pi screen follow the same slide."
+    : "";
+}
+
+/* Walk a dotted path through the nested settings object. */
+function dig(obj, dotted){
+  let node = obj;
+  for (const part of dotted.split(".")){
+    if (node === null || node === undefined || typeof node !== "object") return undefined;
+    node = node[part];
+  }
+  return node;
+}
+
+function reveal(id){
+  const el = $(id);
+  el.type = el.type === "password" ? "text" : "password";
+  el.parentElement.querySelector("button").textContent = el.type === "password" ? "Show" : "Hide";
+}
+
+async function load(){
+  const [r, st] = await Promise.all([fetch("/api/settings"), fetch("/api/state")]);
+  const j = await r.json();
+  const sj = await st.json();
+  const slide = sj.slide;
+  CURRENT = j.settings || {};
+  $("cfgPath").textContent = (j.path || "") + "  ·  build " + (j.build || "?");
+  for (const [id, path] of Object.entries(TEXT_FIELDS)){
+    const v = dig(CURRENT, path);
+    if (v !== undefined && v !== null) $(id).value = v;
+  }
+  for (const [id, path] of Object.entries(NUM_FIELDS)){
+    const v = dig(CURRENT, path);
+    if (v !== undefined && v !== null) $(id).value = v;
+  }
+  for (const [id, path] of Object.entries(BOOL_FIELDS)){
+    const v = dig(CURRENT, path);
+    if (v !== undefined && v !== null) $(id).checked = !!v;
+  }
+  // A stored secret comes back as a mask - the value itself never leaves the
+  // server. An empty string means nothing is stored.
+  for (const [id, path] of Object.entries(SECRET_FIELDS)){
+    const v = dig(CURRENT, path);
+    const stored = (v === MASK);
+    $(id).placeholder = stored ? "stored" : "not set";
+    $(id).dataset.stored = stored ? "1" : "";
+    // The stored value never comes back to the browser, so the field must
+    // always start empty - otherwise a typed secret survives a discard and
+    // the form can never go back to a clean state.
+    $(id).value = "";
+  }
+  // The region select only knows the two official domains. If the config
+  // holds something else, offer it rather than silently showing Europe.
+  const domain = dig(CURRENT, "foxess.domain");
+  const sel = $("domain");
+  if (domain && ![...sel.options].some(o => o.value === domain)){
+    const opt = new Option(domain + " (custom)", domain);
+    sel.appendChild(opt);
+  }
+  applyTheme();
+  updateDirtyState();
+  renderSlides((CURRENT.display || {}).slides);
+  if(slide && slide.name) showSlideNow(slide.name);
+}
+
+function applyTheme(){
+  const t = (CURRENT.display && CURRENT.display.theme) || "dark";
+  document.documentElement.dataset.theme = t === "auto"
+    ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : t;
+}
+
+/* Pick the theme and see it straight away. Discarding puts it back. */
+function previewTheme(){
+  const t = $("theme").value;
+  document.documentElement.dataset.theme = t === "auto"
+    ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : t;
+}
+
+/* What the user has changed, as {dottedPath: value}.
+   Used both to decide whether there is anything to discard and to build the
+   save payload, so the two can never disagree. */
+function formEdits(){
+  const s = {};
+  for (const [id, path] of Object.entries(TEXT_FIELDS)){
+    const el = $(id);
+    if (!el) continue;
+    const cur = dig(CURRENT, path);
+    if (el.value !== (cur ?? "")) s[path] = el.value;
+  }
+  for (const [id, path] of Object.entries(NUM_FIELDS)){
+    const el = $(id); if (!el || el.value === "") continue;
+    const cur = dig(CURRENT, path);
+    const v = Number(el.value);
+    if (v !== Number(cur)) s[path] = v;
+  }
+  for (const [id, path] of Object.entries(BOOL_FIELDS)){
+    const el = $(id); if (!el) continue;
+    const cur = dig(CURRENT, path);
+    if (el.checked !== !!cur) s[path] = el.checked;
+  }
+  // A secret that has been typed over is a change; an empty one is not.
+  for (const [id, path] of Object.entries(SECRET_FIELDS)){
+    const el = $(id); if (!el) continue;
+    if (el.value !== "") s[path] = el.value;
+  }
+  return s;
+}
+
+function isDirty(){ return Object.keys(formEdits()).length > 0; }
+
+/* The discard button is only live when there is something to discard, and
+   the save button is marked so it is obvious there is work pending. */
+function updateDirtyState(){
+  const dirty = isDirty();
+  const discard = $("btnDiscard");
+  if(discard) discard.disabled = !dirty;
+  const save = $("btnSave");
+  if(save) save.classList.toggle("dirty", dirty);
+  const actions = document.querySelector(".actions");
+  if(actions) actions.classList.toggle("has-changes", dirty);
+}
+
+async function save(){
+  const s = formEdits();
+  // Empty secret field = keep the stored one.
+  for (const [id, path] of Object.entries(SECRET_FIELDS)){
+    const el = $(id); if (!el) continue;
+    s[path] = el.value === "" ? KEEP : el.value;
+  }
+  // which slides are on, and in what order
+  s["display.slides"] = currentSlides();
+  // the slide order and which slides are on
+  s["display.slides"] = currentSlides();
+
+  const msg = $("msg");
+  msg.style.display="block"; msg.className="msg"; msg.textContent="Saving…";
+  try{
+    const r = await fetch("/api/settings", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({settings:s})
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || ("HTTP "+r.status));
+    msg.className="msg ok";
+    msg.textContent = Object.keys(s).length
+      ? "Saved. Live connections were re-wired if needed."
+      : "Nothing to save - the settings were already up to date.";
+    await load();
+  }catch(e){
+    msg.className="msg err"; msg.textContent = "Save failed: "+e.message;
+  }
+}
+
+/* Put every field back to the last saved value.
+   The fields were always restored; what was missing was any sign that it
+   had happened, which made the button look broken. */
+async function reload(){
+  const msg = $("msg");
+  try{
+    await load();
+    msg.style.display="block"; msg.className="msg ok";
+    msg.textContent = "Changes discarded.";
+  }catch(e){
+    msg.style.display="block"; msg.className="msg err";
+    msg.textContent = "Could not reload the settings: "+e.message;
+  }
+}
+
+// keep the "detected" table fresh from the live state
+async function detected(){
+  try{
+    const s = await (await fetch("/api/state")).json();
+    const M = s.meta||{};
+    const rows = [
+      ["Inverter serial", M.inverter_sn],["Power station", M.plant_name],
+      ["Data logger", M.datalogger],["Firmware", M.manager_version],
+      ["Battery units", M.battery_units],["Minimum SoC", M.min_soc],
+      ["Live feed", s.connected ? "connected" : "offline"],
+    ];
+    const daily = s.daily || {};
+    if(daily.check){
+      for(const [name, c] of Object.entries(daily.check)){
+        const diff = Math.abs(c.difference);
+        rows.push(["Today " + name,
+                   c.monthly.toFixed(2) + " kWh (hours say " + c.hourly.toFixed(2)
+                   + (diff > 0.5 ? " - DIFFERENT" : "") + ")"]);
+      }
+    }
+    if(daily.live_pv!==undefined && daily.live_pv!==null){
+      rows.push(["Today solar (live feed)",
+                 daily.live_pv.toFixed(2) + " kWh"
+                 + (daily.pv_yield_difference!==undefined
+                    ? " - the yield says " + (-daily.pv_yield_difference).toFixed(2)
+                    : "")]);
+    }
+    if(daily.balance!==undefined && daily.balance!==null){
+      rows.push(["Today balance", daily.balance.toFixed(2) + " kWh"]);
+    }
+    const oct = (s.octopus && s.octopus.meters) || {};
+    if(oct.import_mpan){
+      rows.push(["Octopus import", oct.import_mpan + " / " + (oct.import_serial||"")]);
+      rows.push(["Octopus export",
+                 oct.export_mpan ? oct.export_mpan + " / " + (oct.export_serial||"")
+                                 : "none - the export is measured by the inverter"]);
+    }
+    // the weather and the solar fit
+    const w = s.weather || {};
+    const solar = w.solar || {};
+    if((w.location||{}).name) rows.push(["Weather place", w.location.name]);
+    if(solar.calibrated){
+      rows.push(["Array size",
+                 (solar.kwp!=null ? Number(solar.kwp).toFixed(2) : "—") + " kWp (estimated)"]);
+      rows.push(["Sun collected",
+                 (solar.factor!=null ? Number(solar.factor).toFixed(2) : "—")
+                 + " kWh for every kWh/m²"]);
+      rows.push(["Fitted from",
+                 (solar.days||0) + " days (" + (solar.from||"") + " to " + (solar.to||"") + ")"
+                 + (solar.source ? ", from " + solar.source : "")]);
+      if(solar.array_kwp){
+        rows.push(["Your array is",
+                   Number(solar.array_kwp).toFixed(2) + " kWp - the fit says "
+                   + (solar.kwp!=null ? Number(solar.kwp).toFixed(2) : "—") + " kWp"
+                   + (solar.agrees ? " (they agree)" : " (they differ)")]);
+        if(solar.implied_ratio!=null){
+          rows.push(["Performance ratio",
+                     Number(solar.implied_ratio).toFixed(2)
+                     + " - measured, not assumed"]);
+        }
+      }
+      if(solar.today_ratio!=null && solar.factor!=null){
+        rows.push(["Today so far",
+                   Number(solar.today_ratio).toFixed(2)
+                   + " - the fit says " + Number(solar.factor).toFixed(2)]);
+      }
+    }else if(solar.reason){
+      rows.push(["Solar forecast", solar.reason]);
+    }else if(w.error){
+      rows.push(["Weather", w.error]);
+    }
+    $("detected").innerHTML = rows.map(r=>`<tr><td>${r[0]}</td><td class="v">${r[1]??"—"}</td></tr>`).join("");
+  }catch(_){}
+}
+/* Keep the dirty state current as the user types. */
+document.querySelectorAll(".wrap input, .wrap select").forEach(el => {
+  el.addEventListener("input", updateDirtyState);
+  el.addEventListener("change", updateDirtyState);
+});
+$("theme").addEventListener("change", previewTheme);
+
+/* Do not lose edits by wandering off. */
+window.addEventListener("beforeunload", (e) => {
+  if (!isDirty()) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
+
+load(); detected(); setInterval(detected, 5000);
+</script>
+</body>
+</html>
