@@ -520,13 +520,14 @@ class TestLiveFeedFitting(unittest.TestCase):
         """Three days of solar, at *factor* kWh for every kWh/m² of sun."""
         from foxess.history import HalfHourHistory
         history = HalfHourHistory(None)
-        # 1.0 kWh/m² a day, so the yield is *factor* kWh a day
-        watts = factor * 1000.0 / (48 * 0.5)
+        # 1.0 kWh/m² a day, so the yield is *factor* kWh a day.  The feed
+        # is in kW, and each slot is half an hour.
+        kw = factor / (48 * 0.5)
         for day in (5, 6, 7):
             for slot in range(48):
                 when = datetime(2026, 10, day, slot // 2, slot % 2 * 30,
                                 tzinfo=timezone.utc).timestamp()
-                history.add({"pvPower": watts, "loadsPower": 0,
+                history.add({"pvPower": kw, "loadsPower": 0,
                              "gridConsumptionPower": 0, "feedinPower": 0,
                              "batChargePower": 0, "batDischargePower": 0,
                              "SoC": 50}, when=when)

@@ -36,8 +36,11 @@ SLOT = 1800.0     # half an hour, in seconds
 
 #: The format of the history file.  Version 1 was in watt-hours rather
 #: than kWh, so those numbers were a thousand times too big - they are
-#: discarded rather than mixed in with the real ones.
-HISTORY_VERSION = 2
+#: discarded rather than mixed in with the real ones.  Version 2 divided
+#: the live power by a thousand as well, but the live feed is already in
+#: kW, so its numbers came out a thousand times too small - those are
+#: discarded in the same way.
+HISTORY_VERSION = 3
 
 
 def slot_start(when: float) -> float:
@@ -116,9 +119,11 @@ class HalfHourHistory:
             bucket = self._buckets.setdefault(slot, {})
             for key, field in CHANNELS.items():
                 value = float(live.get(field, 0) or 0)
-                # the live power is in watts and dt is in hours, so this is
-                # watt-hours - the figures are in kWh
-                bucket[key] = bucket.get(key, 0.0) + value * dt / 1000.0
+                # the live power is in kW and dt is in hours, so this is
+                # kWh - the same unit as the rest of the dashboard.  The
+                # feed was in watts once, and the extra thousand is what
+                # made the chart come out a thousand times too small.
+                bucket[key] = bucket.get(key, 0.0) + value * dt
                 self._last_values[key] = value
             # keep the file from growing without bound
             cutoff = now - self.days * 86400

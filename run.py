@@ -651,6 +651,12 @@ def flux_bands(series, timezone_name="Europe/London"):
     return bands
 
 
+#: The usage chart shows the last 24 hours, as 48 half-hour slots.  The
+#: local history is only used once it has filled all of them - see
+#: usage_payload().
+CHART_SLOTS = 48
+
+
 def usage_payload(history: HalfHourHistory,
                   daily: dict | None = None) -> dict:
     """The usage slide: the chart, today's totals and the tariff bands.
@@ -668,12 +674,18 @@ def usage_payload(history: HalfHourHistory,
         if isinstance(value, (int, float)):
             today[key] = float(value)
     hourly = daily.get("hourly") or []
-    # The inverter's hourly report is used when the local history is
-    # nearly empty - which it is for the first few hours after a
-    # restart.  It is a different grain, so the chart is told: an hour's
-    # energy must not be drawn as though it were half an hour's.
+    # The inverter's hourly report is used until the local history has
+    # filled the whole window the chart shows.  It is a different grain,
+    # so the chart is told: an hour's energy must not be drawn as though
+    # it were half an hour's.
+    #
+    # The local history is the better source - it is half-hourly, and it
+    # is measured - but it only covers the time the dashboard has been
+    # running.  Handing over after a handful of slots would leave the
+    # chart empty for the rest of the day, so the handover waits until
+    # the history reaches back over the whole 24 hours.
     granularity = "half_hour"
-    if len(series) < 8 and hourly:
+    if len(series) < CHART_SLOTS and hourly:
         series = hourly
         granularity = "hour"
     out = {
@@ -1391,13 +1403,16 @@ def seed_demo_history(history=None) -> None:
         # is what puts a spike on the chart at two in the morning
         charging = 2.4 if 2 <= hour < 5 else 0.0
         history.add({
-            "pvPower": solar * 1000,
-            "loadsPower": house * 1000,
-            "gridConsumptionPower": max(0.0, house + charging - solar) * 1000,
-            "feedinPower": max(0.0, solar - house - charging) * 1000,
+            # in kW, like the live feed - the history turns power into
+            # energy itself, and it would be wrong by a thousand if the
+            # demo fed it watts
+            "pvPower": solar,
+            "loadsPower": house,
+            "gridConsumptionPower": max(0.0, house + charging - solar),
+            "feedinPower": max(0.0, solar - house - charging),
             "batChargePower": max(0.0, solar * 0.4 - house * 0.2
-                                  + charging) * 1000,
-            "batDischargePower": max(0.0, house * 0.3 - solar * 0.2) * 1000,
+                                  + charging),
+            "batDischargePower": max(0.0, house * 0.3 - solar * 0.2),
             "SoC": 55.0,
         }, when=when)
 

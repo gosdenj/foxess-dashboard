@@ -204,14 +204,33 @@ class TestHalfHourHistory(unittest.TestCase):
 
     def test_it_integrates_power_into_energy(self):
         start = _now_ish()
-        # half an hour at 2 kW is 1 kWh - the live power is in watts
+        # half an hour at 2 kW is 1 kWh - the live feed is in kW, the
+        # same unit the rest of the dashboard uses
         for i in range(60):
-            self.history.add({"pvPower": 2000.0}, when=start + i * 30)
+            self.history.add({"pvPower": 2.0}, when=start + i * 30)
         buckets = self.history.series(48)
         self.assertTrue(buckets)
         # the samples may straddle two half-hour buckets, so add them up.
         # 60 samples 30 s apart is 29.5 minutes of integration.
         self.assertAlmostEqual(sum(b["pv"] for b in buckets), 0.983, places=2)
+
+    def test_a_kilowatt_is_a_kilowatt(self):
+        # The feed was in watts once, and the history divided by a
+        # thousand as well - so the chart came out a thousand times too
+        # small.  A kW for an hour has to be a kWh.
+        start = _now_ish()
+        for i in range(120):
+            self.history.add({"loadsPower": 1.0}, when=start + i * 30)
+        buckets = self.history.series(48)
+        total = sum(b["house"] for b in buckets)
+        self.assertAlmostEqual(total, 1.0, places=1)
+
+    def test_the_history_is_not_a_thousand_times_too_small(self):
+        start = _now_ish()
+        for i in range(120):
+            self.history.add({"loadsPower": 2.0}, when=start + i * 30)
+        buckets = self.history.series(48)
+        self.assertGreater(sum(b["house"] for b in buckets), 1.0)
 
     def test_the_slot_is_the_half_hour(self):
         start = 1_700_000_000.0
@@ -886,6 +905,41 @@ class TestUsageChartData(unittest.TestCase):
         payload = app.usage_payload(history, {})
         self.assertEqual(payload["granularity"], "half_hour")
 
+    def test_the_local_history_waits_until_it_covers_the_day(self):
+        """A history of a few hours would leave the chart empty for the
+        rest of the day, so the inverter's own report draws it until then."""
+        import time
+        import run as app
+        from foxess.history import HalfHourHistory
+        hourly = [{"start": "2026-10-25T10:00:00", "house": 0.4,
+                   "pv": 0.0, "grid_in": 0.5, "grid_out": 0.0,
+                   "batt_in": 0.0, "batt_out": 0.0}]
+        history = HalfHourHistory(None)
+        now = time.time()
+        # half a day of history - the chart shows a whole day
+        for slot in range(25):
+            history.add({"loadsPower": 1.0}, when=now - (25 - slot) * 1800)
+        payload = app.usage_payload(history, {"hourly": hourly})
+        self.assertEqual(payload["granularity"], "hour")
+        self.assertEqual(payload["series"], hourly)
+
+    def test_the_local_history_is_used_once_it_covers_the_day(self):
+        import time
+        import run as app
+        from foxess.history import HalfHourHistory
+        hourly = [{"start": "2026-10-25T10:00:00", "house": 0.4,
+                   "pv": 0.0, "grid_in": 0.5, "grid_out": 0.0,
+                   "batt_in": 0.0, "batt_out": 0.0}]
+        history = HalfHourHistory(None)
+        now = time.time()
+        # the first sample only sets the reference, so a day of history
+        # is one more than the 48 slots the chart shows
+        for slot in range(49):
+            history.add({"loadsPower": 1.0}, when=now - (49 - slot) * 1800)
+        payload = app.usage_payload(history, {"hourly": hourly})
+        self.assertEqual(payload["granularity"], "half_hour")
+        self.assertEqual(len(payload["series"]), 48)
+
     def test_the_self_used_figure_is_the_solar_that_stayed(self):
         """(house - grid in) / house collapses to zero when the battery
         is charged from the grid, which is the opposite of the truth."""
@@ -987,14 +1041,17 @@ class TestHistoryFile(unittest.TestCase):
 
 
 class TestHistoryUnits(unittest.TestCase):
-    """The figures are in kWh, not watt-hours."""
+    """The figures are in kWh, not watt-hours.
+
+    The feed is in kW, so the history is fed kW and comes out in kWh.
+    """
 
     def test_the_energy_is_in_kwh(self):
         import time
         from foxess.history import HalfHourHistory
         history = HalfHourHistory(None)
-        reading = {"pvPower": 2000, "loadsPower": 1000,
-                   "gridConsumptionPower": 0, "feedinPower": 1000,
+        reading = {"pvPower": 2.0, "loadsPower": 1.0,
+                   "gridConsumptionPower": 0, "feedinPower": 1.0,
                    "batChargePower": 0, "batDischargePower": 0, "SoC": 50}
         history.add(reading, when=time.time() - 3600)
         history.add(reading, when=time.time())
@@ -1009,7 +1066,7 @@ class TestHistoryUnits(unittest.TestCase):
         history = HalfHourHistory(None)
         now = time.time()
         for slot in range(48):
-            history.add({"pvPower": 2400, "loadsPower": 500,
+            history.add({"pvPower": 2.4, "loadsPower": 0.5,
                          "gridConsumptionPower": 0, "feedinPower": 0,
                          "batChargePower": 0, "batDischargePower": 0,
                          "SoC": 50}, when=now - (48 - slot) * 1800)

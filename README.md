@@ -455,10 +455,12 @@ half-hourly readings are what crossed the grid boundary, so they are used
 in preference to the inverter's estimate of the same thing.
 
 The scale says what the bars are. The chart is normally half-hourly,
-but when the dashboard has only just started and the inverter's hourly
-report is filling in, the bars are an hour's worth and the scale says
-"kWh per hour" rather than "kWh per half hour" — an hour's energy is
-twice a half hour's, and drawing it as a half hour would double it.
+drawn from the half-hourly history the dashboard records itself. Until
+that history has filled the whole day — which takes a day of the
+dashboard running — the bars come from the inverter's hourly report
+instead, and the scale says "kWh per hour" rather than "kWh per half
+hour": an hour's energy is twice a half hour's, and drawing it as a
+half hour would double it.
 
 ---
 
