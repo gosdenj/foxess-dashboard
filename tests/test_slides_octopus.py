@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from unittest import mock
@@ -1072,6 +1073,34 @@ class TestHistoryUnits(unittest.TestCase):
                          "SoC": 50}, when=now - (48 - slot) * 1800)
         # 2.4 kW for 24 hours would be 57.6 kWh
         self.assertLess(history.today()["pv"], 100.0)
+
+
+class TestDemoHistory(unittest.TestCase):
+    """The demo's history is made up, and it must never be written over
+    the real one - the demo can be run against the real settings file."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.path = os.path.join(self.tmp, "config.json")
+
+    def test_the_real_history_lives_next_to_the_settings(self):
+        import run as app
+        history = app.open_history(Path(self.path))
+        self.assertIsNotNone(history.path)
+        self.assertEqual(history.path.name, "config-history.json")
+
+    def test_the_demo_keeps_its_history_in_memory(self):
+        import run as app
+        history = app.open_history(Path(self.path), demo=True)
+        self.assertIsNone(history.path)
+
+    def test_the_demo_writes_no_history_file(self):
+        import run as app
+        history = app.open_history(Path(self.path), demo=True)
+        app.seed_demo_history(history)
+        self.assertTrue(history.series(48))
+        self.assertFalse(os.path.exists(
+            os.path.join(self.tmp, "config-history.json")))
 
 
 class TestExportMeterPoint(unittest.TestCase):

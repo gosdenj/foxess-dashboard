@@ -1383,6 +1383,20 @@ def seed_from_env(config: ConfigStore) -> None:
         print(f"seeded {len(updates)} setting(s) from the environment")
 
 
+def open_history(config_path: Path, demo: bool = False) -> HalfHourHistory:
+    """The history that goes with the settings.
+
+    It is kept next to the settings file, so the two travel together.
+    The demo keeps its history in memory instead: it is made up, and it
+    must never be written over the real one - which is what would happen
+    if the demo were run against the real settings file.
+    """
+    if demo:
+        return HalfHourHistory(None)
+    return HalfHourHistory(
+        config_path.with_name(config_path.stem + "-history.json"))
+
+
 def seed_demo_history(history=None) -> None:
     """Give the demo a day of history, so the chart looks like the mock-up."""
     if history is None:
@@ -1502,8 +1516,7 @@ def main() -> int:
     state = DashboardState(config)
 
     config_path = config.path
-    history_path = config_path.with_name(config_path.stem + "-history.json")
-    history = HalfHourHistory(history_path)
+    history = open_history(config_path, args.demo)
 
     host = args.host or config.get("server.host", "0.0.0.0")
     port = args.port or int(config.get("server.port", 8765) or 8765)
