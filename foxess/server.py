@@ -376,10 +376,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             ratio = weather.DEFAULT_PERFORMANCE_RATIO
 
+        temperature = field("temperature_unit", "celsius")
+        wind = field("wind_speed_unit", "kmh")
         try:
             raw = weather.fetch(latitude, longitude, tilt=tilt, azimuth=azimuth,
-                                temperature=field("temperature_unit", "celsius"),
-                                wind=field("wind_speed_unit", "kmh"),
+                                temperature=temperature, wind=wind,
                                 past_days=21, forecast_days=7)
         except weather.WeatherError as exc:
             self._json({"ok": False, "message": str(exc)}, 502)
@@ -388,7 +389,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._json({"ok": False, "message": f"{type(exc).__name__}: {exc}"}, 502)
             return
 
-        parsed = weather.parse(raw, field("location"))
+        parsed = weather.parse(raw, field("location"), temperature=temperature,
+                               wind=wind)
         current = parsed.get("current") or {}
         days = parsed.get("days") or []
         solar = (self.state.weather() or {}).get("solar") or {}

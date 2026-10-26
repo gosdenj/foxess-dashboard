@@ -227,6 +227,25 @@ or a street will not be found — use the town nearby. The latitude and
 longitude are filled in for you, and **Save and test the forecast** says
 what came back *and saves it*, so the slide starts working straight away.
 
+### The units you chose
+
+**Temperature** and **Wind speed** are carried through to the slide. The
+forecast is fetched in the unit you asked for, so the numbers *are* in
+that unit, and the slide labels them with it:
+
+| You chose | The slide says |
+|---|---|
+| Celsius | `17°C` |
+| Fahrenheit | `63°F` |
+| Kilometres per hour | `20 km/h` |
+| Metres per second | `5.6 m/s` |
+| Miles per hour | `12 mph` |
+| Knots | `10 kn` |
+
+The weather service writes its units in its own way — it calls miles per
+hour `mp/h` — so the unit cannot be worked out from the reply; it is
+taken from the settings and carried the whole way through.
+
 ### The array's size, worked out from your own yield
 
 The forecast knows how much sun lands on the roof. It does not know how

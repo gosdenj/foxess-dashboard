@@ -1161,6 +1161,10 @@ function renderWeather(w){
   const solar= (w && w.solar) || {};
   const units= (w && w.units) || {};
   const windUnit = units.wind || "km/h";
+  // The units that are set in the settings, rather than a guess made
+  // here - the slide has to say what the numbers actually are.
+  const tempUnit = units.temperature || "°C";
+  const precipUnit = units.precipitation || "mm";
   const loc = (w && w.location) || {};
 
   if(!UI.wxBuilt){
@@ -1183,7 +1187,7 @@ function renderWeather(w){
   setText($("wxAttribution"), (w && w.attribution) || "");
 
   const empty = !days.length;
-  setText($("wxTemp"), cur.temperature!=null ? Math.round(cur.temperature)+"°" : "—");
+  setText($("wxTemp"), cur.temperature!=null ? Math.round(cur.temperature)+tempUnit : "—");
   setText($("wxText"), empty ? ((w && w.error) || "no forecast") : (cur.text || "—"));
   setText($("wxWind"), cur.wind!=null
     ? Math.round(cur.wind)+" "+windUnit+(cur.wind_text?" "+cur.wind_text:"") : "");
@@ -1191,9 +1195,9 @@ function renderWeather(w){
 
   const today = days[0] || {};
   const kvs = [
-    cur.apparent!=null ? Math.round(cur.apparent)+"°" : "—",
+    cur.apparent!=null ? Math.round(cur.apparent)+tempUnit : "—",
     cur.wind!=null ? Math.round(cur.wind)+" "+windUnit+(cur.wind_text?" "+cur.wind_text:"") : "—",
-    cur.precipitation!=null ? Number(cur.precipitation).toFixed(1)+" mm" : "—",
+    cur.precipitation!=null ? Number(cur.precipitation).toFixed(1)+" "+precipUnit : "—",
     cur.humidity!=null ? Math.round(cur.humidity)+"%" : "—",
     (today.sunrise && today.sunset) ? today.sunrise+" – "+today.sunset : "—",
     today.uv!=null ? Number(today.uv).toFixed(1) : "—",
@@ -1249,8 +1253,8 @@ function renderWeather(w){
     if(!card) return;
     setText(card.querySelector(".d"), i===0 ? "Today" : (d.weekday || ""));
     setIcon(card.querySelector(".ic"), d.icon);
-    setText(card.querySelector(".t"), d.tmax!=null ? Math.round(d.tmax)+"°" : "—");
-    setText(card.querySelector(".lo"), d.tmin!=null ? Math.round(d.tmin)+"°" : "—");
+    setText(card.querySelector(".t"), d.tmax!=null ? Math.round(d.tmax)+tempUnit : "—");
+    setText(card.querySelector(".lo"), d.tmin!=null ? Math.round(d.tmin)+tempUnit : "—");
     setText(card.querySelector(".r"), d.precip_prob ? Math.round(d.precip_prob)+"%" : "");
     setText(card.querySelector(".wd"),
       d.wind!=null ? Math.round(d.wind)+" "+windUnit+" "+(d.wind_text||"") : "");

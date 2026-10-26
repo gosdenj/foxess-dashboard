@@ -1033,26 +1033,35 @@ def collect_weather(state: DashboardState, config: ConfigStore,
     latitude = config.get("weather.latitude")
     longitude = config.get("weather.longitude")
     name = config.get("weather.location", "") or ""
+    # The units are wanted even when there is no forecast to go with them,
+    # so that the slide shows the ones that are set rather than the
+    # defaults it would fall back on.
+    temperature = config.get("weather.temperature_unit", "celsius")
+    wind = config.get("weather.wind_speed_unit", "kmh")
+    units = {
+        "temperature": weather.temperature_unit(temperature),
+        "wind": weather.wind_unit(wind),
+        "precipitation": "mm",
+    }
     now = time.time()
     if latitude in (None, "") or longitude in (None, ""):
         return {
             "location": {"name": name},
             "error": "no location set - add one in the settings",
             "days": [], "current": {}, "solar": {}, "updated": now,
+            "units": units,
             "attribution": weather.ATTRIBUTION,
         }
 
     tilt = int(config.get("weather.tilt", weather.DEFAULT_TILT) or 0)
     azimuth = int(config.get("weather.azimuth", weather.DEFAULT_AZIMUTH) or 0)
-    temperature = config.get("weather.temperature_unit", "celsius")
-    wind = config.get("weather.wind_speed_unit", "kmh")
     performance_ratio = config.get("weather.performance_ratio",
                                    weather.DEFAULT_PERFORMANCE_RATIO)
 
     raw = weather.fetch(latitude, longitude, tilt=tilt, azimuth=azimuth,
                         temperature=temperature, wind=wind,
                         past_days=WEATHER_PAST_DAYS, forecast_days=7)
-    payload = weather.parse(raw, name)
+    payload = weather.parse(raw, name, temperature=temperature, wind=wind)
 
     # -- the calibration ------------------------------------------------
     tz = plant_timezone(state, config)
@@ -1177,12 +1186,16 @@ def collect_weather(state: DashboardState, config: ConfigStore,
     return payload
 
 
-def demo_weather() -> dict:
+def demo_weather(temperature: str = "celsius", wind: str = "kmh") -> dict:
     """A made-up forecast, so the slide can be seen without a location.
 
     The numbers are plausible for an October in the UK: a bright day, a
     wet one, and a run of fog.  The solar figures come from a pretend
     5.5 kWp array, which is what a real one would look like.
+
+    The numbers are made up in km/h and °C and converted to the units
+    that are set, so that the demo shows the same units as the real
+    forecast would.
     """
     now = time.time()
     conditions = [(3, "Overcast", 1.4), (0, "Clear sky", 3.1),
@@ -1199,11 +1212,11 @@ def demo_weather() -> dict:
             "code": code,
             "text": text,
             "icon": weather.weather_icon(code),
-            "tmax": 12 + (index % 3),
-            "tmin": 6 + (index % 2),
+            "tmax": weather.convert_temperature(12 + (index % 3), temperature),
+            "tmin": weather.convert_temperature(6 + (index % 2), temperature),
             "precip": 0.0 if code in (0, 1, 2) else 1.4,
             "precip_prob": 0 if code in (0, 1, 2) else 60,
-            "wind": 12 + index * 3,
+            "wind": weather.convert_wind(12 + index * 3, wind),
             "wind_dir": 215.0,
             "wind_text": "SW",
             "sunrise": "07:12",
@@ -1215,11 +1228,16 @@ def demo_weather() -> dict:
     return {
         "location": {"name": "Demo - Welwyn Garden City", "latitude": 51.8,
                      "longitude": -0.19, "timezone": "Europe/London"},
-        "units": {"temperature": "°C", "wind": "km/h", "precipitation": "mm"},
+        "units": {"temperature": weather.temperature_unit(temperature),
+                  "wind": weather.wind_unit(wind),
+                  "precipitation": "mm"},
         "current": {
             "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M"),
-            "temperature": 14.8, "apparent": 12.7, "code": 3,
-            "text": "Overcast", "icon": "cloud", "is_day": 1, "wind": 24.1,
+            "temperature": weather.convert_temperature(14.8, temperature),
+            "apparent": weather.convert_temperature(12.7, temperature),
+            "code": 3,
+            "text": "Overcast", "icon": "cloud", "is_day": 1,
+            "wind": weather.convert_wind(24.1, wind),
             "wind_dir": 214.0, "wind_text": "SW", "humidity": 96.0,
             "precipitation": 0.0, "cloud": 98.0,
         },
@@ -1251,14 +1269,22 @@ def weather_worker(state: DashboardState, config: ConfigStore,
     while not stop.is_set():
         try:
             if demo and not config.get("weather.latitude"):
-                payload = demo_weather()
+                payload = demo_weather(
+                    config.get("weather.temperature_unit", "celsius"),
+                    config.get("weather.wind_speed_unit", "kmh"))
             else:
                 payload = collect_weather(state, config, demo=demo,
                                           history=history)
         except Exception as exc:  # noqa: BLE001
             payload = {"error": f"{type(exc).__name__}: {exc}",
                        "updated": time.time(), "days": [], "current": {},
-                       "solar": {}, "attribution": weather.ATTRIBUTION}
+                       "solar": {}, "attribution": weather.ATTRIBUTION,
+                       "units": {
+                           "temperature": weather.temperature_unit(
+                               config.get("weather.temperature_unit", "celsius")),
+                           "wind": weather.wind_unit(
+                               config.get("weather.wind_speed_unit", "kmh")),
+                           "precipitation": "mm"}}
             print(f"weather failed: {payload['error']}")
         if payload:
             state.set_weather(payload)

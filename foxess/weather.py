@@ -81,6 +81,18 @@ COMPASS = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
 TEMPERATURE_UNITS = {"celsius": "°C", "fahrenheit": "°F"}
 WIND_UNITS = {"kmh": "km/h", "ms": "m/s", "mph": "mph", "kn": "kn"}
 
+#: How Open-Meteo writes the units back in its reply.  It does not echo
+#: the names it was given - it spells them out in its own way, and writes
+#: miles per hour as "mp/h" rather than "mph".  A reply read on its own
+#: is therefore not enough to label a reading, which is why the unit that
+#: was asked for is carried through instead of guessed at.
+TEMPERATURE_REPLY_UNITS = {"°C": "°C", "°F": "°F"}
+WIND_REPLY_UNITS = {"km/h": "km/h", "m/s": "m/s", "mp/h": "mph", "kn": "kn"}
+
+#: How many kilometres an hour one of each unit is worth.  The demo's
+#: made-up numbers are in km/h and converted from there.
+WIND_IN_KMH = {"kmh": 1.0, "ms": 3.6, "mph": 1.609344, "kn": 1.852}
+
 #: Below this much sun a day's numbers say more about the cloud than about
 #: the panels, so those days are left out of the calibration.
 MIN_POA = 0.4
@@ -129,14 +141,60 @@ def compass(degrees: Any) -> str:
     return COMPASS[int((degrees % 360) / 22.5 + 0.5) % 16]
 
 
+def _unit_name(name: Any, known: dict, default: str) -> str:
+    """The name to ask the weather service for a unit by."""
+    key = str(name or "").strip().lower()
+    return key if key in known else default
+
+
+def _unit_label(name: Any, known: dict, reply: dict, default: str) -> str:
+    """The label for a unit, however it was spelled.
+
+    Both the name that was asked for ("mph") and the way the service
+    writes it back ("mp/h") are understood, so that a reading is labelled
+    with the unit it is actually in.
+    """
+    key = str(name or "").strip()
+    if key in known:
+        return known[key]
+    if key.lower() in known:
+        return known[key.lower()]
+    if key in reply:
+        return reply[key]
+    if key.lower() in reply:
+        return reply[key.lower()]
+    return default
+
+
 def temperature_unit(name: Any) -> str:
     """The symbol for a temperature unit."""
-    return TEMPERATURE_UNITS.get(str(name or "celsius").lower(), "°C")
+    return _unit_label(name, TEMPERATURE_UNITS, TEMPERATURE_REPLY_UNITS, "°C")
 
 
 def wind_unit(name: Any) -> str:
     """The unit for a wind speed."""
-    return WIND_UNITS.get(str(name or "kmh").lower(), "km/h")
+    return _unit_label(name, WIND_UNITS, WIND_REPLY_UNITS, "km/h")
+
+
+def convert_wind(value: Any, unit: Any) -> float | None:
+    """A wind speed given in km/h, in the unit asked for."""
+    try:
+        speed = float(value)
+    except (TypeError, ValueError):
+        return None
+    factor = WIND_IN_KMH.get(_unit_name(unit, WIND_UNITS, "kmh"))
+    return speed / factor
+
+
+def convert_temperature(value: Any, unit: Any) -> float | None:
+    """A temperature given in °C, in the unit asked for."""
+    try:
+        celsius = float(value)
+    except (TypeError, ValueError):
+        return None
+    if _unit_name(unit, TEMPERATURE_UNITS, "celsius") == "fahrenheit":
+        return celsius * 9.0 / 5.0 + 32.0
+    return celsius
 
 
 def clamp_azimuth(value: Any) -> int:
@@ -253,8 +311,8 @@ def fetch(latitude: float, longitude: float, tilt: int = DEFAULT_TILT,
             "wind_speed_10m_max", "wind_direction_10m_dominant",
             "sunrise", "sunset", "uv_index_max",
         )),
-        "temperature_unit": temperature if temperature in TEMPERATURE_UNITS else "celsius",
-        "wind_speed_unit": wind if wind in WIND_UNITS else "kmh",
+        "temperature_unit": _unit_name(temperature, TEMPERATURE_UNITS, "celsius"),
+        "wind_speed_unit": _unit_name(wind, WIND_UNITS, "kmh"),
         "timezone": "auto",
         "tilt": max(0, min(90, int(tilt))),
         "azimuth": clamp_azimuth(azimuth),
@@ -417,10 +475,19 @@ def _daily_list(raw: dict) -> list[dict]:
     return out
 
 
-def parse(raw: dict, name: str = "", tz_name: str | None = None) -> dict:
-    """The reply, in the shape the dashboard wants."""
+def parse(raw: dict, name: str = "", tz_name: str | None = None,
+          temperature: str = "", wind: str = "") -> dict:
+    """The reply, in the shape the dashboard wants.
+
+    *temperature* and *wind* are the units that were asked for.  They are
+    used in preference to anything in the reply, because the service
+    writes its units in its own way - "mp/h" for miles per hour - and a
+    reading labelled from that would be wrong.  When they are not given
+    the reply is read instead.
+    """
     current = raw.get("current") or {}
     code = current.get("weather_code")
+    current_units = raw.get("current_units") or {}
 
     def number(value, default=None):
         if value is None:
@@ -439,12 +506,15 @@ def parse(raw: dict, name: str = "", tz_name: str | None = None) -> dict:
         },
         "updated": time.time(),
         "units": {
-            "temperature": temperature_unit(raw.get("temperature_unit")
-                                            or (raw.get("current_units") or {})
-                                            .get("temperature_2m", "°C")),
-            "wind": wind_unit(raw.get("wind_speed_unit")
-                              or (raw.get("current_units") or {}).get("wind_speed_10m", "km/h")),
-            "precipitation": (raw.get("current_units") or {}).get("precipitation", "mm"),
+            "temperature": temperature_unit(temperature
+                                            or raw.get("temperature_unit")
+                                            or current_units.get("temperature_2m")
+                                            or "°C"),
+            "wind": wind_unit(wind
+                              or raw.get("wind_speed_unit")
+                              or current_units.get("wind_speed_10m")
+                              or "km/h"),
+            "precipitation": current_units.get("precipitation") or "mm",
         },
         "current": {
             "time": current.get("time") or "",

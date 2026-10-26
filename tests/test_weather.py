@@ -131,6 +131,35 @@ class TestUnits(unittest.TestCase):
         self.assertEqual(weather.wind_unit("kn"), "kn")
         self.assertEqual(weather.wind_unit(None), "km/h")
 
+    def test_the_spellings_the_service_uses_are_understood(self):
+        # The service does not echo the names it was given - it writes
+        # miles per hour as "mp/h" and metres per second as "m/s".  A
+        # reading labelled from those has to say the same thing.
+        self.assertEqual(weather.wind_unit("mp/h"), "mph")
+        self.assertEqual(weather.wind_unit("m/s"), "m/s")
+        self.assertEqual(weather.wind_unit("km/h"), "km/h")
+        self.assertEqual(weather.temperature_unit("°C"), "°C")
+        self.assertEqual(weather.temperature_unit("°F"), "°F")
+
+    def test_the_case_does_not_matter(self):
+        self.assertEqual(weather.wind_unit("MPH"), "mph")
+        self.assertEqual(weather.temperature_unit("Fahrenheit"), "°F")
+
+    def test_a_wind_speed_is_converted(self):
+        self.assertAlmostEqual(weather.convert_wind(24.1, "kmh"), 24.1, places=3)
+        self.assertAlmostEqual(weather.convert_wind(24.1, "ms"), 6.694, places=2)
+        self.assertAlmostEqual(weather.convert_wind(24.1, "mph"), 14.974, places=2)
+        self.assertAlmostEqual(weather.convert_wind(24.1, "kn"), 13.009, places=2)
+
+    def test_a_temperature_is_converted(self):
+        self.assertAlmostEqual(weather.convert_temperature(14.8, "celsius"), 14.8, places=3)
+        self.assertAlmostEqual(weather.convert_temperature(14.8, "fahrenheit"),
+                               58.64, places=2)
+
+    def test_nothing_converts_to_nothing(self):
+        self.assertIsNone(weather.convert_wind("rubbish", "mph"))
+        self.assertIsNone(weather.convert_temperature(None, "fahrenheit"))
+
 
 class TestAzimuth(unittest.TestCase):
     def test_south_is_zero(self):
@@ -285,6 +314,91 @@ class TestParse(unittest.TestCase):
     def test_the_attribution_is_there(self):
         parsed = weather.parse(_raw(), "Somewhere")
         self.assertIn("Open-Meteo", parsed["attribution"])
+
+
+def _raw_in(temperature: str = "°C", wind: str = "km/h") -> dict:
+    """A reply that names its units the way the service does.
+
+    The service writes its own spellings into the reply - miles per hour
+    comes back as "mp/h" - so this is how a reply really looks.
+    """
+    raw = _raw()
+    raw["current_units"] = {"temperature_2m": temperature,
+                             "wind_speed_10m": wind,
+                             "precipitation": "mm"}
+    return raw
+
+
+class TestUnitsAreCarriedThrough(unittest.TestCase):
+    """The units that are set have to reach the slide.
+
+    The service writes its units in its own way, so the label cannot be
+    worked out from the reply - it has to come from the settings, or the
+    number and the unit will disagree.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _config(self, **settings):
+        from foxess.config import ConfigStore
+        config = ConfigStore(os.path.join(self.tmp, "config.json"))
+        config.save({f"weather.{name}": value
+                     for name, value in settings.items()})
+        return config
+
+    def test_the_unit_that_was_asked_for_is_the_one_shown(self):
+        # A reply that does not name its units - only the settings know
+        # what the numbers are in.
+        raw = _raw_in()
+        raw.pop("current_units")
+        parsed = weather.parse(raw, "Somewhere", temperature="fahrenheit",
+                               wind="mph")
+        self.assertEqual(parsed["units"]["temperature"], "°F")
+        self.assertEqual(parsed["units"]["wind"], "mph")
+
+    def test_the_reply_is_read_when_no_unit_is_given(self):
+        parsed = weather.parse(_raw_in("°F", "mp/h"), "Somewhere")
+        self.assertEqual(parsed["units"]["temperature"], "°F")
+        self.assertEqual(parsed["units"]["wind"], "mph")
+
+    def test_the_settings_reach_the_payload(self):
+        import run as app
+        from foxess.state import DashboardState
+
+        config = self._config(location="Somewhere", latitude=51.8,
+                              longitude=-0.2, wind_speed_unit="mph",
+                              temperature_unit="fahrenheit")
+        state = DashboardState(config)
+        state.set_daily({})
+        raw = _raw_in()
+        raw.pop("current_units")
+        with mock.patch.object(weather, "fetch", return_value=raw):
+            payload = app.collect_weather(state, config, history=None)
+        self.assertEqual(payload["units"]["wind"], "mph")
+        self.assertEqual(payload["units"]["temperature"], "°F")
+
+    def test_the_units_are_there_before_there_is_a_forecast(self):
+        import run as app
+        from foxess.state import DashboardState
+
+        config = self._config(wind_speed_unit="mph",
+                              temperature_unit="fahrenheit")
+        state = DashboardState(config)
+        payload = app.collect_weather(state, config, history=None)
+        self.assertEqual(payload["units"]["wind"], "mph")
+        self.assertEqual(payload["units"]["temperature"], "°F")
+
+    def test_the_demo_converts_its_numbers(self):
+        import run as app
+
+        payload = app.demo_weather("fahrenheit", "mph")
+        self.assertEqual(payload["units"]["temperature"], "°F")
+        self.assertEqual(payload["units"]["wind"], "mph")
+        # 24.1 km/h is about 15 mph
+        self.assertAlmostEqual(payload["current"]["wind"], 14.97, places=1)
+        # 14.8 °C is about 59 °F
+        self.assertAlmostEqual(payload["current"]["temperature"], 58.6, places=1)
 
 
 class TestGeocode(unittest.TestCase):
@@ -518,6 +632,24 @@ class TestWeatherSlide(unittest.TestCase):
         self.assertIn("function testWeather()", self.settings)
         self.assertIn("/api/weather/locate", self.settings)
         self.assertIn("/api/weather/test", self.settings)
+
+    def test_the_slide_uses_the_units_that_are_set(self):
+        self.assertIn('const tempUnit = units.temperature', self.index)
+        self.assertIn('const precipUnit = units.precipitation', self.index)
+        self.assertIn('Math.round(cur.temperature)+tempUnit', self.index)
+        self.assertIn('Math.round(cur.apparent)+tempUnit', self.index)
+        self.assertIn('Math.round(d.tmax)+tempUnit', self.index)
+        self.assertIn('Math.round(d.tmin)+tempUnit', self.index)
+
+    def test_the_slide_has_no_units_written_into_it(self):
+        # A unit typed into the slide would ignore the settings, and
+        # would be wrong for anyone who chose a different one.
+        for hardcoded in ('Math.round(cur.temperature)+"°"',
+                          'Math.round(cur.apparent)+"°"',
+                          'Math.round(d.tmax)+"°"',
+                          'Math.round(d.tmin)+"°"',
+                          '.toFixed(1)+" mm"'):
+            self.assertNotIn(hardcoded, self.index)
 
     def test_the_weather_slide_is_offered(self):
         self.assertIn('["weather","Weather"', self.settings)
