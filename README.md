@@ -167,6 +167,19 @@ The dashes always travel *along* the path as drawn, so the grid wire has to
 be reversed when importing in the linear diagram but when exporting in the
 rings one, and the battery wire has to be reversed while discharging in both.
 
+### Which way do the wires bend?
+
+In the rings diagram the four wires do not all curve the same way. **Solar
+and house bow away from the hub's horizontal axis**, while **grid and battery
+bow towards it**, so the diagram reads as two mirrored pairs rather than four
+wires sagging together.
+
+The bend is a property of the path, not of the animation — it does not change
+which way the dashes travel, only the shape of the wire they travel along.
+`tests/test_diagram.py` measures it out of the markup and checks that the
+two pairs stay opposite, that the diagram stays mirror-symmetric about the
+hub, and that every wire still lands on its node's ring.
+
 Two checks guard this:
 
 ```bash

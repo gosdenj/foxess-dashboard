@@ -8,6 +8,7 @@ blank on the Pi with no error anywhere.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import sys
@@ -237,6 +238,106 @@ class TestFlowDiagram(unittest.TestCase):
         self.assertIn('body[data-diagram="rings"] #flowHint{display:none}', self.index)
         self.assertIn('body[data-diagram="flow"] .side .flowhint.tiny-only{display:none}',
                       self.index)
+
+
+class TestRingWireBend(unittest.TestCase):
+    """The four rings wires must not all bend the same way.
+
+    Solar and house bow away from the hub's horizontal axis, while grid and
+    battery bow towards it, so the diagram reads as two mirrored pairs rather
+    than four wires sagging together.
+
+    The bend is measured the same way for every wire: the signed distance
+    from the control point to the chord, with the chord rotated a quarter
+    turn anticlockwise on screen.  All four wires are drawn left to right, so
+    a positive bend means "below the chord" and a negative one means "above
+    it".
+    """
+
+    def setUp(self) -> None:
+        self.index = _read(INDEX)
+        rings = self.index[self.index.index('id="ringsSvg"'):]
+        self.wires = {}
+        for match in re.finditer(r'<path id="(rLine\w+)"[^>]*?\sd="([^"]+)"', rings):
+            self.wires[match.group(1)] = self._parse(match.group(2))
+
+    @staticmethod
+    def _parse(d: str) -> tuple:
+        """A quadratic Bezier: the start point, the control point, the end."""
+        nums = [float(n) for n in re.findall(r"-?\d+\.?\d*", d)]
+        return ((nums[0], nums[1]), (nums[2], nums[3]), (nums[4], nums[5]))
+
+    @staticmethod
+    def _bend(wire: tuple) -> float:
+        """Signed perpendicular offset of the control point from the chord."""
+        (x0, y0), (cx, cy), (x2, y2) = wire
+        dx, dy = x2 - x0, y2 - y0
+        length = math.hypot(dx, dy)
+        # the chord rotated a quarter turn anticlockwise on screen
+        nx, ny = -dy / length, dx / length
+        return (cx - x0) * nx + (cy - y0) * ny
+
+    def test_every_wire_was_found(self):
+        for wire in ("rLinePv", "rLineLoad", "rLineGrid", "rLineBat"):
+            self.assertIn(wire, self.wires, f"wire {wire} not found")
+
+    def test_solar_and_house_bend_the_other_way_from_grid_and_battery(self):
+        pv = self._bend(self.wires["rLinePv"])
+        load = self._bend(self.wires["rLineLoad"])
+        grid = self._bend(self.wires["rLineGrid"])
+        bat = self._bend(self.wires["rLineBat"])
+
+        self.assertLess(pv * grid, 0, "solar and grid bend the same way")
+        self.assertLess(pv * bat, 0, "solar and battery bend the same way")
+        self.assertLess(load * grid, 0, "house and grid bend the same way")
+        self.assertLess(load * bat, 0, "house and battery bend the same way")
+
+    def test_the_two_pairs_bend_alike(self):
+        """Solar matches house, and grid matches battery."""
+        pv = self._bend(self.wires["rLinePv"])
+        load = self._bend(self.wires["rLineLoad"])
+        grid = self._bend(self.wires["rLineGrid"])
+        bat = self._bend(self.wires["rLineBat"])
+        self.assertGreater(pv * load, 0, "solar and house bend differently")
+        self.assertGreater(grid * bat, 0, "grid and battery bend differently")
+
+    def test_the_bend_is_not_flat(self):
+        """A straight wire would satisfy the signs but draw as a dead line."""
+        for wire, bend in ((name, self._bend(geometry))
+                           for name, geometry in self.wires.items()):
+            self.assertGreater(abs(bend), 5.0, f"{wire} is nearly straight")
+
+    def test_the_wires_still_join_their_nodes(self):
+        """The bend must not move an endpoint off its ring.
+
+        Every wire runs between two nodes - a satellite on one side and the
+        hub on the other - so each of its two ends is checked against the
+        ring it belongs to.
+        """
+        # node id -> (centre x, centre y, radius)
+        rings = {"PV": (135, 58, 50), "LOAD": (765, 58, 50),
+                 "GRID": (135, 182, 50), "BATT": (765, 182, 50),
+                 "HUB": (450, 124, 60)}
+        # wire id -> the node at each end, in the order the path is drawn
+        ends = {"rLinePv": ("PV", "HUB"), "rLineLoad": ("HUB", "LOAD"),
+                "rLineGrid": ("GRID", "HUB"), "rLineBat": ("HUB", "BATT")}
+        for wire, (from_node, to_node) in ends.items():
+            (x0, y0), _, (x2, y2) = self.wires[wire]
+            for point, node in (((x0, y0), from_node), ((x2, y2), to_node)):
+                cx, cy, radius = rings[node]
+                distance = math.hypot(point[0] - cx, point[1] - cy)
+                self.assertAlmostEqual(distance, radius, delta=0.5,
+                                       msg=f"{wire} endpoint left the {node} ring")
+
+    def test_the_diagram_stays_mirror_symmetric(self):
+        """Solar mirrors house, and grid mirrors battery, about x=450."""
+        for left, right in (("rLinePv", "rLineLoad"), ("rLineGrid", "rLineBat")):
+            left_ctrl = self.wires[left][1]
+            right_ctrl = self.wires[right][1]
+            self.assertAlmostEqual(900 - left_ctrl[0], right_ctrl[0], delta=0.05,
+                                   msg=f"{left} and {right} are not mirrored")
+            self.assertAlmostEqual(left_ctrl[1], right_ctrl[1], delta=0.05,
+                                   msg=f"{left} and {right} are not mirrored")
 
 
 class TestDiagramSwitching(unittest.TestCase):
