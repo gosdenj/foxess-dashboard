@@ -213,6 +213,29 @@ The ESP32 client ignores the rotation and keeps showing its compact summary.
 Set the list, the order and the interval in **Settings → Slides**. `0` turns
 the rotation off.
 
+### How the slide changes
+
+The slide change is a card dealt onto a deck. The slide that is leaving is
+copied and left on screen behind the one that is arriving, so it is not
+blanked out first — it dissolves underneath while the new slide sweeps in
+over it from the right, throwing a shadow onto the copy as it goes.
+
+The **header does not move**. It sits outside the slide altogether, which is
+also why it is the right place for the clock and the date: it is the one
+part of the dashboard that stays put while everything below it changes.
+
+### The header carries the date
+
+The clock shows the time and the date together:
+
+```
+Your plant  1B2C3D4E5F60 · WLAN-WW (WiFi & LAN)   [LIVE] [0.2s] [Tue 27 Oct 2026 · 09:44] [⚙]
+```
+
+The header is one line, so on a small screen something has to give. The
+weekday goes first, and on the smallest screens the plant details go before
+the plant name — the name is what matters.
+
 ## Weather and the solar forecast
 
 The **Weather** slide shows the conditions right now, a seven-day solar

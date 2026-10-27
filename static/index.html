@@ -57,11 +57,43 @@ h1 .sub{color:var(--dim);font-weight:400;font-size:var(--fsl);margin-left:.5em}
       padding:.3em .65em;font-size:var(--fsl);text-decoration:none;white-space:nowrap}
 .gear:hover{color:var(--text);border-color:var(--muted)}
 
+/* The clock carries the date as well as the time.  The top of the
+   screen is the one part of the dashboard that does not change with
+   the slide, so it is the right place to say what day it is. */
+#clockPill{gap:0}
+#clockDate::after{content:" · ";opacity:.55}
+#clockWd::after,#clockDm::after{content:" "}
+/* A small screen has not got room for the weekday as well, and the
+   plant details are the first thing to go when the header runs out
+   of space - the name is what matters. */
+@media(max-width:1000px),(max-height:560px){
+  #clockWd{display:none}
+  /* The plant details are the least important thing in the header, so
+     they are the first to give up a little room. */
+  h1 .sub{font-size:calc(var(--fsl) * .92)}
+}
+@media(max-width:640px),(max-height:400px){
+  h1 .sub{display:none}
+}
+
 /* ---- main grid ---- */
 .dash{display:grid;gap:var(--gap);padding:var(--gap);min-height:0;overflow:hidden;
       grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);
       grid-template-rows:minmax(0,1.15fr) minmax(0,1fr);
       grid-template-areas:"flow side" "totals sys"}
+/* The stage holds the slide that is showing, and for a moment the one
+   that is leaving as well - so that the new slide can come in over the
+   top of it, the way a card is dealt onto a deck.  The leaving slide is
+   a copy, so it has to be behind: it is the copy that fades away under
+   the slide arriving. */
+.stage{position:relative;min-height:0;overflow:hidden;display:grid;
+       grid-template-rows:minmax(0,1fr)}
+.stage > .dash{position:relative;z-index:1;background:var(--bg)}
+.stage > .dash.ghost{position:absolute;inset:0;z-index:0;pointer-events:none}
+/* While a slide is being dealt in it throws a shadow onto the slide
+   underneath it, which is what makes it read as a card rather than as
+   a picture sliding past. */
+.stage > .dash.dealing{box-shadow:-24px 0 48px -16px rgba(0,0,0,.65)}
 .flow{grid-area:flow}.side{grid-area:side}
 .totals{grid-area:totals}.system{grid-area:sys}
 .usage{grid-area:usage}.octopus{grid-area:octopus}.today{grid-area:today}
@@ -168,7 +200,7 @@ body.no-totals.no-system[data-layout="full"] .dash{grid-template-areas:"flow sid
 
 }
 @media(max-width:640px),(max-height:400px){
-  body[data-slide="usage"] .dash{grid-template-areas:"usage usage" "today today"}
+  body .dash[data-slide="usage"]{grid-template-areas:"usage usage" "today today"}
   .dash{grid-template-columns:minmax(0,1fr);
         grid-template-rows:minmax(0,1.25fr) minmax(0,1fr);
         grid-template-areas:"flow" "side"}
@@ -314,23 +346,41 @@ body[data-diagram="rings"] .socbar{margin-bottom:.15em}
    A slide is a named view. Only the panels that belong to the current one
    are shown, and the grid is laid out for that slide. */
 .usage,.octopus,.today{display:none}
-body[data-slide="power"] .usage,
-body[data-slide="power"] .octopus,
-body[data-slide="power"] .today{display:none}
-body[data-slide="usage"] .flow,
-body[data-slide="usage"] .side,
-body[data-slide="usage"] .totals,
-body[data-slide="usage"] .system{display:none}
-body[data-slide="usage"] .usage,
-body[data-slide="usage"] .octopus,
-body[data-slide="usage"] .today{display:flex}
+body .dash[data-slide="power"] .usage,
+body .dash[data-slide="power"] .octopus,
+body .dash[data-slide="power"] .today{display:none}
+body .dash[data-slide="usage"] .flow,
+body .dash[data-slide="usage"] .side,
+body .dash[data-slide="usage"] .totals,
+body .dash[data-slide="usage"] .system{display:none}
+body .dash[data-slide="usage"] .usage,
+body .dash[data-slide="usage"] .octopus,
+body .dash[data-slide="usage"] .today{display:flex}
+
+/* ---- the slide transition -----------------------------------------------
+   The panels come in from the right when the slide changes, and the
+   header stays where it is - it carries the clock, and it is the one
+   part of the screen that does not change.
+
+   There is no animation rule here on purpose.  The animation is
+   started from the script, in applySlide(), because a CSS animation
+   runs once and then keeps its final state, and the rule for a slide
+   stays matched while that slide is showing - so it would not run
+   again on the next change. */
 
 /* The grid for each slide. These have to be per breakpoint - a desktop
-   area map applied at 800x480 would override the compact layout. */
+   area map applied at 800x480 would override the compact layout.
+
+   The rules are written against the slide rather than against the
+   body, so that a copy of a slide - the one that is on its way out -
+   keeps showing the slide it was copied from.  The body is still in
+   the selector so that the slide rules and the layout setting, which
+   is also written against the body, weigh the same; the slide rules
+   come later in the file, so the slide owns the grid either way. */
 @media(min-width:1001px) and (min-height:561px){
-  body[data-slide="power"] .dash{
+  body .dash[data-slide="power"]{
     grid-template-areas:"flow side" "totals sys"}
-  body[data-slide="usage"] .dash{
+  body .dash[data-slide="usage"]{
     grid-template-columns:minmax(0,2fr) minmax(0,1fr);
     grid-template-rows:minmax(0,1.45fr) minmax(0,1fr);
     grid-template-areas:"usage octopus" "today today"}
@@ -369,7 +419,7 @@ body[data-slide="usage"] .today{display:flex}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .panel .hint b{color:var(--flux);font-weight:600}
 /* The Octopus panel is narrow, so its hint wraps rather than being cut */
-body[data-slide="usage"] .octopus .hint{white-space:normal;overflow:visible;
+body .dash[data-slide="usage"] .octopus .hint{white-space:normal;overflow:visible;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 
 /* ---- the Live panel on a large screen ---------------------------------
@@ -454,50 +504,50 @@ body[data-slide="usage"] .octopus .hint{white-space:normal;overflow:visible;
      usage   the half-hourly chart, the Octopus figures and today's totals
      energy  the cumulative totals, the system details and the live figures */
 @media(min-width:1001px) and (min-height:561px){
-  body[data-slide="power"] .dash{
+  body .dash[data-slide="power"]{
     grid-template-columns:minmax(0,2fr) minmax(0,1fr);
     grid-template-rows:minmax(0,1.5fr) minmax(0,1fr);
     grid-template-areas:"flow flow" "side totals"}
-  body[data-slide="usage"] .dash{
+  body .dash[data-slide="usage"]{
     grid-template-columns:minmax(0,2fr) minmax(0,1fr);
     grid-template-rows:minmax(0,1.45fr) minmax(0,1fr);
     grid-template-areas:"usage octopus" "today today"}
 }
 @media(max-width:1000px),(max-height:560px){
-  body[data-slide="power"] .dash{
+  body .dash[data-slide="power"]{
     grid-template-columns:minmax(0,2fr) minmax(0,1fr);
     grid-template-rows:minmax(0,1.18fr) minmax(0,1fr);
     grid-template-areas:"flow flow" "side totals"}
   /* The chart and the Octopus figures sit side by side, and today's
      totals run the full width underneath - the same shape as the
      mock-up. */
-  body[data-slide="usage"] .dash{
+  body .dash[data-slide="usage"]{
     grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);
     grid-template-areas:"usage octopus" "today today";
     grid-template-rows:minmax(0,1.32fr) minmax(0,1fr)}
-  body[data-slide="usage"] .octopus .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body .dash[data-slide="usage"] .octopus .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
   /* the panel is narrow, so the labels need the room */
-  body[data-slide="usage"] .octopus .tile{padding:.45em .5em}
-  body[data-slide="usage"] .octopus .tile .k{letter-spacing:.02em}
-  body[data-slide="usage"] .today .tiles{grid-template-columns:repeat(6,minmax(0,1fr))}
+  body .dash[data-slide="usage"] .octopus .tile{padding:.45em .5em}
+  body .dash[data-slide="usage"] .octopus .tile .k{letter-spacing:.02em}
+  body .dash[data-slide="usage"] .today .tiles{grid-template-columns:repeat(6,minmax(0,1fr))}
 }
 @media(max-width:640px),(max-height:400px){
-  body[data-slide="power"] .dash{
+  body .dash[data-slide="power"]{
     grid-template-columns:minmax(0,1fr);
     grid-template-rows:minmax(0,1fr);
     grid-template-areas:"side"}
   /* a diagram this small is unreadable - the figures are what matter */
-  body[data-slide="power"] .flow{display:none}
+  body .dash[data-slide="power"] .flow{display:none}
   /* On a tiny screen each slide keeps only what it is for: the chart for
      the usage slide, the counters for the energy one. */
-  body[data-slide="usage"] .dash{
+  body .dash[data-slide="usage"]{
     grid-template-columns:minmax(0,1fr);
     grid-template-rows:minmax(0,1fr);
     grid-template-areas:"usage"}
-  body[data-slide="usage"] .octopus,
-  body[data-slide="usage"] .today{display:none}
+  body .dash[data-slide="usage"] .octopus,
+  body .dash[data-slide="usage"] .today{display:none}
   /* the SoC bar does not fit here - the SoC tile carries the level */
-  body[data-slide="power"] .side .socbar{display:none}
+  body .dash[data-slide="power"] .side .socbar{display:none}
 }
 
 /* ---- the weather slide ------------------------------------------------
@@ -506,46 +556,46 @@ body[data-slide="usage"] .octopus .hint{white-space:normal;overflow:visible;
    for the 7" screen and it works there.
 */
 .now,.sun,.week{display:none}
-body[data-slide="weather"] .flow,
-body[data-slide="weather"] .side,
-body[data-slide="weather"] .totals,
-body[data-slide="weather"] .system,
-body[data-slide="weather"] .usage,
-body[data-slide="weather"] .octopus,
-body[data-slide="weather"] .today{display:none}
-body[data-slide="weather"] .now,
-body[data-slide="weather"] .sun,
-body[data-slide="weather"] .week{display:flex}
+body .dash[data-slide="weather"] .flow,
+body .dash[data-slide="weather"] .side,
+body .dash[data-slide="weather"] .totals,
+body .dash[data-slide="weather"] .system,
+body .dash[data-slide="weather"] .usage,
+body .dash[data-slide="weather"] .octopus,
+body .dash[data-slide="weather"] .today{display:none}
+body .dash[data-slide="weather"] .now,
+body .dash[data-slide="weather"] .sun,
+body .dash[data-slide="weather"] .week{display:flex}
 .now{grid-area:now}.sun{grid-area:sun}.week{grid-area:week}
-body[data-slide="weather"] .dash{
+body .dash[data-slide="weather"]{
   grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);
   grid-template-rows:minmax(0,1.12fr) minmax(0,1fr);
   grid-template-areas:"now sun" "week week"}
 @media(max-width:640px),(max-height:400px){
   /* too small for three panels - the conditions and the week are what
      matter, so the forecast goes */
-  body[data-slide="weather"] .dash{
+  body .dash[data-slide="weather"]{
     grid-template-columns:minmax(0,1fr);
     grid-template-rows:minmax(0,1fr) minmax(0,1fr);
     grid-template-areas:"now" "week"}
-  body[data-slide="weather"] .sun{display:none}
+  body .dash[data-slide="weather"] .sun{display:none}
   /* and the details that do not fit go as well - the screen is too
      small for six rows of them */
-  body[data-slide="weather"] .now .kv.opt{display:none}
-  body[data-slide="weather"] .now .kvs{grid-template-columns:minmax(0,1fr)}
-  body[data-slide="weather"] .now .kvs .kv:nth-child(n+2){display:none}
+  body .dash[data-slide="weather"] .now .kv.opt{display:none}
+  body .dash[data-slide="weather"] .now .kvs{grid-template-columns:minmax(0,1fr)}
+  body .dash[data-slide="weather"] .now .kvs .kv:nth-child(n+2){display:none}
 }
 /* On the very smallest screens the list of details goes altogether and
    the wind rides along with the conditions instead. */
 @media(max-width:420px),(max-height:280px){
-  body[data-slide="weather"] .now .kvs{display:none}
-  body[data-slide="weather"] .now .tw{display:inline;margin-left:.45em}
+  body .dash[data-slide="weather"] .now .kvs{display:none}
+  body .dash[data-slide="weather"] .now .tw{display:inline;margin-left:.45em}
   /* the wind and the rain chance do not fit on a day card this small */
-  body[data-slide="weather"] .wday .wd,
-  body[data-slide="weather"] .wday .r{display:none}
+  body .dash[data-slide="weather"] .wday .wd,
+  body .dash[data-slide="weather"] .wday .r{display:none}
   /* the padding gives way instead - the type does not shrink */
-  body[data-slide="weather"] .wday{padding:.2em .1em}
-  body[data-slide="weather"] .dash{
+  body .dash[data-slide="weather"] .wday{padding:.2em .1em}
+  body .dash[data-slide="weather"]{
     grid-template-rows:minmax(0,.9fr) minmax(0,1.1fr)}
 }
 
@@ -616,13 +666,14 @@ body[data-slide="weather"] .dash{
     <div class="spacer"></div>
     <span class="pill hide-sm"><span class="dot off" id="liveDot"></span><span id="liveStatus">connecting…</span></span>
     <span class="pill mono hide-sm" id="agePill">—</span>
-    <span class="pill mono" id="clockPill">—</span>
+    <span class="pill mono" id="clockPill"><span id="clockDate"><span id="clockWd"></span><span id="clockDm"></span><span id="clockYr"></span></span><span id="clockTime">—</span></span>
     <a class="gear" href="/settings" id="gear" title="Settings">⚙</a>
   </header>
 
   <div id="errorBox" class="err" style="display:none"></div>
 
-  <div class="dash">
+  <div class="stage">
+    <div class="dash" id="dash">
 
     <section class="panel usage">
       <h2>Grid &mdash; last 24 hours <span class="src" id="usageSource"></span></h2>
@@ -830,8 +881,9 @@ body[data-slide="weather"] .dash{
       <h2>The week ahead <span class="src" id="wxAttribution"></span></h2>
       <div class="days" id="wxDays"></div>
     </section>
-  </div>
-</div>
+    </div><!-- /.dash -->
+  </div><!-- /.stage -->
+</div><!-- /.app -->
 
 <script>
 const $ = id => document.getElementById(id);
@@ -908,7 +960,18 @@ function render(s){
   $("agePill").textContent = (s.live_age_s!=null) ? s.live_age_s.toFixed(1)+"s" : "—";
   const tz = (CFG.display && CFG.display.timezone && CFG.display.timezone!=="auto")
              ? CFG.display.timezone : undefined;
-  $("clockPill").textContent = new Date((s.server_time||0)*1000).toLocaleTimeString(
+  const now = new Date((s.server_time||0)*1000);
+  // The date is with the time, because the top of the screen is the one
+  // part of the dashboard that stays put while the slides change.  The
+  // parts are asked for separately: en-GB puts a comma between the
+  // weekday and the date, and there is no room for it.  The weekday is
+  // in a span of its own because a small screen drops it.
+  const wd = now.toLocaleDateString("en-GB", {weekday:"short", timeZone:tz});
+  const dm = now.toLocaleDateString("en-GB", {day:"2-digit", month:"short", timeZone:tz});
+  const yr = now.toLocaleDateString("en-GB", {year:"numeric", timeZone:tz});  $("clockWd").textContent = wd;
+  $("clockDm").textContent = dm;
+  $("clockYr").textContent = yr;
+  $("clockTime").textContent = now.toLocaleTimeString(
       "en-GB", {hour:"2-digit",minute:"2-digit",hour12:(CFG.display?.clock==="12h"),timeZone:tz});
 
   if (s.api_error){
@@ -1108,11 +1171,85 @@ function ringWire(id, active, reverse){
    The server owns which slide is showing, so every display - the Pi kiosk,
    a phone, the ESP32 - shows the same one at the same moment. */
 let LAST_SLIDE = "";
+let SLIDE_ANIM = null;
+let GHOST = null;
+
+/* A slide change is a card being dealt onto a deck.
+
+   The slide that is leaving is copied before the new one is put in
+   place, and the copy is left sitting in the stage behind the new
+   slide.  The new slide then comes in over the top of it from the
+   right, while the copy dissolves underneath.  That way the old slide
+   is never simply blanked out - it is still there, fading, until the
+   new one has covered it.
+
+   The copy is put in the stage after the live slide rather than before
+   it, because the copy has the same element ids in it as the live
+   slide and the live one must be the one that getElementById finds.
+
+   The animation is started from here rather than from a rule in the
+   stylesheet, because a CSS animation runs once and then keeps its
+   final state: the rule for a slide stays matched while that slide is
+   showing, so the animation would not run again on the next change of
+   slide.  Starting it here means every change gets one. */
+function slideTransition(ghost){
+  const dash = $("dash");
+  /* Someone who has asked for less movement should not get any. */
+  const still = window.matchMedia
+             && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* The copy dissolves under the slide that is arriving.  It is a
+     little slower than the slide itself, so the old one is still
+     faintly visible for a moment after the new one has landed. */
+  if(ghost){
+    if(still || !ghost.animate) ghost.remove();
+    else{
+      const g = ghost.animate(
+        [{opacity:1, transform:"translateX(0)"},
+         {opacity:0, transform:"translateX(0)"}],
+        {duration:560, delay:60, easing:"ease-in-out"});
+      g.onfinish = () => { ghost.remove(); if(GHOST===ghost) GHOST = null; };
+    }
+  }
+
+  if(!dash || !dash.animate || still) return;
+  if(SLIDE_ANIM) SLIDE_ANIM.cancel();
+  dash.classList.add("dealing");
+  SLIDE_ANIM = dash.animate(
+    [{transform:"translateX(100%)", opacity:.8},
+     {transform:"translateX(0)", opacity:1}],
+    {duration:420, easing:"cubic-bezier(.22,.61,.36,1)"});
+  SLIDE_ANIM.onfinish = () => dash.classList.remove("dealing");
+}
+
 function applySlide(slide){
   if(!slide || !slide.name) return;
   if(slide.name === LAST_SLIDE) return;
+  const dash = $("dash");
+  const stage = document.querySelector(".stage");
+  const leaving = LAST_SLIDE;
   LAST_SLIDE = slide.name;
   document.body.dataset.slide = slide.name;
+
+  /* Copy the slide that is on its way out.  It is copied before the
+     new slide is put in place, so it still holds the old slide. */
+  let ghost = null;
+  if(stage && dash && leaving){
+    if(GHOST) GHOST.remove();
+    ghost = dash.cloneNode(true);
+    ghost.removeAttribute("id");
+    ghost.classList.remove("dealing");
+    ghost.classList.add("ghost");
+    stage.appendChild(ghost);
+    GHOST = ghost;
+  }
+
+  /* The slide draws its own layout, so which slide is showing is
+     written on the slide itself.  The copy keeps the old name, which
+     is how it stays showing the old slide. */
+  if(dash) dash.dataset.slide = slide.name;
+
+  slideTransition(ghost);
 }
 
 /* ---- the weather slide ------------------------------------------------

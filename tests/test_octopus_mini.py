@@ -480,14 +480,16 @@ class TestMiniToday(unittest.TestCase):
             ZoneInfo("Europe/London")).date())
 
     def test_today_totals_come_from_the_deltas(self):
-        rows = [
-            {"read_at": "2026-10-26T00:00:00Z", "consumption": 1000.0,
-             "export": 100.0, "demand": 100.0, "cost": 5.0},
-            {"read_at": "2026-10-26T00:30:00Z", "consumption": 1300.0,
-             "export": 100.0, "demand": 200.0, "cost": 7.0},
-            {"read_at": "2026-10-26T01:00:00Z", "consumption": 1600.0,
-             "export": 400.0, "demand": 300.0, "cost": 9.0},
-        ]
+        # "Today" means the local day, so the readings have to be from
+        # today - a fixed date falls out of it as the calendar moves.
+        from foxess.octopus import today_start
+        start = today_start("Europe/London")
+        readings = [(1000.0, 100.0, 100.0, 5.0),
+                    (1300.0, 100.0, 200.0, 7.0),
+                    (1600.0, 400.0, 300.0, 9.0)]
+        rows = [{"read_at": (start + timedelta(minutes=30 * i)).isoformat(),
+                 "consumption": c, "export": e, "demand": d, "cost": k}
+                for i, (c, e, d, k) in enumerate(readings)]
         mini = self._mini_with(rows)
         today = mini.today()
         # 600 Wh of consumption, 300 Wh of export, 21p of cost

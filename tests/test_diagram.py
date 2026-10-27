@@ -230,7 +230,7 @@ class TestFlowDiagram(unittest.TestCase):
 
         The slides own the grid now, and the power slide gives the diagram
         the full width of the top row for both themes."""
-        self.assertIn('body[data-slide="power"] .dash{', self.index)
+        self.assertIn('.dash[data-slide="power"]{', self.index)
         self.assertIn('grid-template-areas:"flow flow" "side totals"', self.index)
 
     def test_the_summary_line_appears_once(self):
@@ -357,7 +357,7 @@ class TestDiagramSwitching(unittest.TestCase):
     def test_small_screens_keep_their_own_layout(self):
         """The slide grids must not override the tiny-screen arrangement."""
         self.assertIn("@media(max-width:640px),(max-height:400px)", self.index)
-        self.assertIn("body[data-slide=\"power\"] .flow{display:none}", self.index)
+        self.assertIn(".dash[data-slide=\"power\"] .flow{display:none}", self.index)
 
     def test_flow_lines_hide_when_there_is_no_power(self):
         self.assertIn('el.style.display = active ? "" : "none"', self.index)

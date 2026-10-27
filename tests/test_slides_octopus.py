@@ -54,7 +54,7 @@ class TestSlideConfig(unittest.TestCase):
         layout, so each slide needs its own map per breakpoint."""
         index = _read(INDEX)
         for slide in ("power", "usage", "weather"):
-            self.assertIn(f'body[data-slide="{slide}"] .dash', index)
+            self.assertIn(f'.dash[data-slide="{slide}"]', index)
         self.assertIn("@media(min-width:1001px) and (min-height:561px)", index)
         self.assertIn("@media(max-width:1000px),(max-height:560px)", index)
         self.assertIn("@media(max-width:640px),(max-height:400px)", index)
@@ -76,6 +76,87 @@ class TestSlideConfig(unittest.TestCase):
     def test_the_api_key_is_a_secret(self):
         self.assertIn("octopus.api_key", SECRET_PATHS)
         self.assertIn("octopus.api_key", EDITABLE)
+
+
+class TestSlideTransition(unittest.TestCase):
+    """A slide change is a card dealt onto a deck.
+
+    The slide that is leaving is copied and left behind the one that is
+    arriving, so it is still on screen while the new one sweeps over it
+    and it dissolves underneath, rather than being blanked out first."""
+
+    def setUp(self):
+        self.index = _read(INDEX)
+
+    def _function(self, name: str) -> str:
+        """The source of one function in the page."""
+        start = self.index.index(f"function {name}(")
+        end = self.index.index("\n}", start)
+        return self.index[start:end]
+
+    def test_the_leaving_slide_is_copied_and_left_behind(self):
+        body = self._function("applySlide")
+        self.assertIn("cloneNode(true)", body)
+        self.assertIn('ghost.classList.add("ghost")', body)
+        self.assertIn("stage.appendChild(ghost)", body)
+
+    def test_the_copy_is_made_before_the_new_slide_goes_in(self):
+        """Otherwise the copy would hold the new slide and there would be
+        nothing to fade."""
+        body = self._function("applySlide")
+        self.assertLess(body.index("cloneNode(true)"),
+                        body.index("dash.dataset.slide = slide.name"))
+
+    def test_the_copy_is_behind_the_slide_that_is_arriving(self):
+        self.assertIn(".stage > .dash{position:relative;z-index:1", self.index)
+        self.assertIn(".stage > .dash.ghost{position:absolute;inset:0;z-index:0",
+                      self.index)
+
+    def test_the_copy_dissolves_and_is_taken_away(self):
+        body = self._function("slideTransition")
+        self.assertIn("ghost.animate(", body)
+        self.assertIn("opacity:0", body)
+        self.assertIn("ghost.remove()", body)
+
+    def test_the_new_slide_comes_in_from_the_right(self):
+        body = self._function("slideTransition")
+        self.assertIn('transform:"translateX(100%)"', body)
+        self.assertIn('transform:"translateX(0)"', body)
+
+    def test_the_transition_is_skipped_for_someone_who_asked_for_less_movement(self):
+        body = self._function("slideTransition")
+        self.assertIn("prefers-reduced-motion: reduce", body)
+
+    def test_the_header_is_outside_the_stage(self):
+        """The header carries the clock, and it does not move when the
+        slide changes - so it cannot be inside the slide."""
+        self.assertLess(self.index.index("<header>"), self.index.index('<div class="stage">'))
+        self.assertLess(self.index.index("</header>"), self.index.index('<div class="stage">'))
+
+    def test_the_slide_owns_its_own_grid(self):
+        """The slide rules are written against the slide itself, so that a
+        copy of a slide can keep showing the slide it was copied from.
+
+        They have to beat the layout setting, which is written against
+        the body, so they carry the body in the selector as well."""
+        for slide in ("power", "usage", "weather"):
+            self.assertIn(f'body .dash[data-slide="{slide}"]', self.index)
+        self.assertNotIn("body[data-slide=", self.index)
+
+    def test_the_date_is_with_the_time(self):
+        self.assertIn('<span id="clockDate">', self.index)
+        self.assertIn('<span id="clockTime">', self.index)
+        self.assertIn('$("clockWd").textContent', self.index)
+        self.assertIn('$("clockDm").textContent', self.index)
+        self.assertIn('$("clockYr").textContent', self.index)
+
+    def test_a_small_screen_drops_the_weekday_before_the_plant_name(self):
+        """The header is one line, so something has to give.  The weekday
+        goes first, and the plant details go before the plant name."""
+        self.assertIn("@media(max-width:1000px),(max-height:560px){\n  #clockWd{display:none}",
+                      self.index)
+        self.assertIn("@media(max-width:640px),(max-height:400px){\n  h1 .sub{display:none}",
+                      self.index)
 
 
 class TestSlideState(unittest.TestCase):

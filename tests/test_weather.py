@@ -535,7 +535,10 @@ class TestLiveFeedFitting(unittest.TestCase):
 
     def test_the_daily_solar_is_read_from_the_history(self):
         history = self._history(4.7)
-        days = history.daily_pv("Europe/London")
+        # The history is from a fixed date, so the window has to be wide
+        # enough to reach it - the default window is three weeks, and it
+        # moves on with the calendar.
+        days = history.daily_pv("Europe/London", days=3650)
         for date in ("2026-10-06", "2026-10-07"):
             self.assertAlmostEqual(days[date], 4.7, places=1)
         # The days are the plant's, not UTC's, so the first day starts an
@@ -601,13 +604,13 @@ class TestWeatherSlide(unittest.TestCase):
             self.assertIn(panel, self.index)
 
     def test_the_slide_hides_the_other_panels(self):
-        self.assertIn('body[data-slide="weather"] .now', self.index)
-        self.assertIn('body[data-slide="weather"] .sun', self.index)
-        self.assertIn('body[data-slide="weather"] .week', self.index)
-        self.assertIn('body[data-slide="weather"] .flow', self.index)
+        self.assertIn('.dash[data-slide="weather"] .now', self.index)
+        self.assertIn('.dash[data-slide="weather"] .sun', self.index)
+        self.assertIn('.dash[data-slide="weather"] .week', self.index)
+        self.assertIn('.dash[data-slide="weather"] .flow', self.index)
 
     def test_the_grid_is_set_for_the_slide(self):
-        self.assertIn('body[data-slide="weather"] .dash{', self.index)
+        self.assertIn('.dash[data-slide="weather"]{', self.index)
         self.assertIn('grid-template-areas:"now sun" "week week"', self.index)
 
     def test_the_icons_are_drawn_not_fetched(self):
