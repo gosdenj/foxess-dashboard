@@ -25,6 +25,11 @@ def _read(path: str) -> str:
         return fh.read()
 
 
+def _minutes(stamp: str) -> int:
+    """"HH:MM" as minutes past midnight."""
+    return int(stamp[:2]) * 60 + int(stamp[3:])
+
+
 def _raw(hours=None, current_hour=12, offset=0, daily=None):
     """A reply shaped like Open-Meteo's.
 
@@ -622,7 +627,7 @@ class TestWeatherSlide(unittest.TestCase):
         self.assertNotIn("weather-icons", self.index)
 
     def test_the_render_is_called(self):
-        self.assertIn("renderWeather(s.weather || {})", self.index)
+        self.assertIn("renderWeather(s.weather || {}", self.index)
 
     def test_the_settings_page_has_the_weather_fields(self):
         for field in ("wx_location", "wx_latitude", "wx_longitude",
@@ -657,6 +662,129 @@ class TestWeatherSlide(unittest.TestCase):
 
     def test_the_weather_slide_is_offered(self):
         self.assertIn('["weather","Weather"', self.settings)
+
+
+class TestTwilight(unittest.TestCase):
+    """The twilight around the sun, which the daylight band is drawn from."""
+
+    def test_the_twilight_is_hung_off_the_day(self):
+        payload = weather.parse(_raw())
+        day = payload["days"][0]
+        self.assertIn("twilight", day)
+        for half in ("dawn", "dusk"):
+            self.assertEqual(sorted(day["twilight"][half]),
+                             ["astronomical", "civil", "nautical"])
+            for name, value in day["twilight"][half].items():
+                self.assertRegex(value, r"^\d{2}:\d{2}$", name)
+
+    def test_the_twilight_sits_around_the_forecast_sunrise(self):
+        payload = weather.parse(_raw())
+        day = payload["days"][0]
+        dawn = day["twilight"]["dawn"]
+        rise = _minutes(day["sunrise"])
+        fall = _minutes(day["sunset"])
+        # the light goes first, and comes back last
+        self.assertLess(_minutes(dawn["civil"]), rise)
+        self.assertLess(_minutes(dawn["nautical"]), _minutes(dawn["civil"]))
+        self.assertLess(_minutes(dawn["astronomical"]), _minutes(dawn["nautical"]))
+        self.assertGreater(_minutes(day["twilight"]["dusk"]["civil"]), fall)
+        # and the civil twilight is half an hour or so either side
+        self.assertTrue(15 <= rise - _minutes(dawn["civil"]) <= 60)
+        self.assertTrue(15 <= _minutes(day["twilight"]["dusk"]["civil"]) - fall <= 60)
+
+    def test_the_twilight_is_moved_to_the_forecast_s_times(self):
+        # the forecast's own sunrise and sunset are what the slide shows
+        # everywhere else, so the twilight is moved to sit around them
+        daily = {
+            "time": ["2026-10-05", "2026-10-06", "2026-10-07"],
+            "sunrise": ["2026-10-05T05:11", "2026-10-06T05:11", "2026-10-07T05:11"],
+            "sunset": ["2026-10-05T19:44", "2026-10-06T19:44", "2026-10-07T19:44"],
+        }
+        payload = weather.parse(_raw(daily=daily))
+        day = payload["days"][0]
+        self.assertEqual(day["sunrise"], "05:11")
+        before = _minutes(day["sunrise"]) - _minutes(day["twilight"]["dawn"]["civil"])
+        self.assertTrue(15 <= before <= 60, before)
+
+    def test_no_location_means_no_twilight(self):
+        raw = _raw()
+        raw["latitude"] = None
+        raw["longitude"] = None
+        payload = weather.parse(raw)
+        self.assertEqual(payload["days"][0]["twilight"], {})
+
+    def test_a_day_with_no_sunrise_in_the_forecast_gets_ours(self):
+        # the forecast does not always carry the sunrise, and the band
+        # can still be drawn from the sun's own times
+        raw = _raw()
+        raw["daily"]["sunrise"] = ["", "", ""]
+        raw["daily"]["sunset"] = ["", "", ""]
+        payload = weather.parse(raw)
+        day = payload["days"][0]
+        self.assertRegex(day["sunrise"], r"^\d{2}:\d{2}$")
+        self.assertRegex(day["sunset"], r"^\d{2}:\d{2}$")
+        self.assertIn("dawn", day["twilight"])
+        self.assertIn("dusk", day["twilight"])
+
+    def test_a_place_with_no_sun_has_no_band(self):
+        # the middle of the polar night, where the sun does not rise
+        raw = _raw()
+        raw["latitude"] = 78.0
+        raw["longitude"] = 15.0
+        raw["daily"]["time"] = ["2026-12-05", "2026-12-06", "2026-12-07"]
+        raw["daily"]["sunrise"] = ["2026-12-05T", "2026-12-06T", "2026-12-07T"]
+        raw["daily"]["sunset"] = ["2026-12-05T", "2026-12-06T", "2026-12-07T"]
+        raw["current"]["time"] = "2026-12-06T12:00:00"
+        payload = weather.parse(raw)
+        self.assertEqual(payload["days"][0]["twilight"], {})
+
+    def test_the_twilight_follows_the_daylight_saving_change(self):
+        # the offset in the reply is the one for right now, but a day
+        # either side of a clock change has its own
+        raw = _raw(offset=3600)
+        payload = weather.parse(raw)
+        for day in payload["days"]:
+            self.assertIn("twilight", day)
+
+
+class TestDaylightBand(unittest.TestCase):
+    """The band itself, on the weather slide."""
+
+    def setUp(self):
+        self.index = _read(INDEX)
+
+    def test_the_band_is_there(self):
+        self.assertIn('id="wxDaylight"', self.index)
+        self.assertIn("function renderDaylight(", self.index)
+        self.assertIn("renderDaylight(today, loc.timezone, serverTime)",
+                      self.index)
+
+    def test_the_band_is_drawn_in_nine_pieces(self):
+        # night, three twilights, the day, and the three again
+        self.assertIn('["night","astro","nautical","civil","day",', self.index)
+
+    def test_the_band_has_a_marker_for_the_time_of_day(self):
+        self.assertIn(".dl-band .now", self.index)
+        self.assertIn("placeMinutes(", self.index)
+
+    def test_the_old_sun_row_has_gone(self):
+        # the band says when the sun rises and sets, so the row that
+        # said it before is not wanted
+        self.assertNotIn('["Sun",1]', self.index)
+
+    def test_the_band_is_hidden_when_the_screen_is_small(self):
+        self.assertIn('.now .daylight{display:none}', self.index)
+
+    def test_the_band_uses_the_places_own_clock(self):
+        # the sun's times are the place's, not the browser's
+        self.assertIn("Intl.DateTimeFormat", self.index)
+        self.assertIn("timeZone:timezone", self.index)
+
+    def test_the_band_follows_the_servers_clock(self):
+        # the same clock as the one at the top of the screen
+        self.assertIn("renderWeather(s.weather || {}, s.server_time)",
+                      self.index)
+        self.assertIn("placeMinutes(timezone, serverTime)", self.index)
 
 
 if __name__ == "__main__":

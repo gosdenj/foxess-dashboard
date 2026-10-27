@@ -29,7 +29,7 @@ from typing import Any
 KEEP = "__KEEP__"
 
 #: Build stamp, so it is obvious at a glance which version is running.
-BUILD = "2026-10-27.1"
+BUILD = "2026-10-27.2"
 
 #: What the API returns in place of a secret.
 MASK = "********"

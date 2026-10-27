@@ -11,6 +11,9 @@
   --text:#e5e9f0; --muted:#8b97ab; --dim:#5d6a80;
   --pv:#f5b642; --load:#4a9eff; --grid:#a78bfa; --bat:#34d399; --alarm:#f87171;
   --flux:#f0a868;
+  /* the daylight band: the colours of the sky either side of the sun */
+  --dl-night:#070c16; --dl-astro:#16203a; --dl-nautical:#2b3a63;
+  --dl-civil:#8a6a3c;
   --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",
             "Liberation Sans","DejaVu Sans","Noto Sans",Arial,sans-serif;
   --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,
@@ -26,6 +29,9 @@ html[data-theme="light"]{
   --bg:#f2f4f8; --panel:#ffffff; --panel2:#f7f9fc; --line:rgba(15,23,42,.12);
   --text:#16202f; --muted:#5a6a80; --dim:#8a97a8;
   --pv:#d98a00; --load:#1668d6; --grid:#7048d8; --bat:#0e9f6e; --alarm:#dc2626;
+  /* in the light theme the night is a pale grey rather than a dark blue */
+  --dl-night:#c6cedd; --dl-astro:#a6b3cb; --dl-nautical:#7f93b7;
+  --dl-civil:#e6c489;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;overflow:hidden}
@@ -582,6 +588,8 @@ body .dash[data-slide="weather"]{
   body .dash[data-slide="weather"] .now .kv.opt{display:none}
   body .dash[data-slide="weather"] .now .kvs{grid-template-columns:minmax(0,1fr)}
   body .dash[data-slide="weather"] .now .kvs .kv:nth-child(n+2){display:none}
+  /* and the daylight band goes with them - there is no room for it */
+  body .dash[data-slide="weather"] .now .daylight{display:none}
 }
 /* On the very smallest screens the list of details goes altogether and
    the wind rides along with the conditions instead. */
@@ -611,15 +619,50 @@ body .dash[data-slide="weather"]{
    and the wind comes up next to the conditions instead. */
 .nowtemp .tw{display:none}
 .now .kvs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
-          gap:0 calc(var(--gap)*1.4);margin-top:calc(var(--gap)*.7);
+          gap:0 calc(var(--gap)*1.4);margin-top:calc(var(--gap)*.45);
           flex:1 1 auto;min-height:0;align-content:start}
 .kv{display:flex;justify-content:space-between;align-items:baseline;gap:6px;
-    padding:.16em 0;border-bottom:1px solid var(--line);min-width:0}
+    padding:.12em 0;border-bottom:1px solid var(--line);min-width:0}
 .kv:last-child{border-bottom:0}
 .kv .k{color:var(--muted);font-size:var(--fsl);white-space:nowrap;overflow:hidden;
        text-overflow:ellipsis}
 .kv .v{font-family:var(--font-mono);font-size:var(--fsl);color:var(--text);
        text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The daylight band.  The strip is the whole day, from midnight to
+   midnight, so that the twilight either side of the sun can be shown
+   and the marker can be put where it belongs. */
+.now .kvs .kv.wide{grid-column:1/-1}
+.daylight{grid-column:1/-1;min-width:0;margin-top:calc(var(--gap)*.25);
+          font-size:var(--fsl)}
+.dl-head{display:flex;justify-content:space-between;align-items:baseline;gap:.6em;
+         font-size:var(--fsl)}
+.dl-head .t{color:var(--dim);font-weight:600;letter-spacing:.08em;
+            text-transform:uppercase;white-space:nowrap}
+.dl-head .v{color:var(--muted);white-space:nowrap;overflow:hidden;
+            text-overflow:ellipsis;text-align:right}
+.dl-head .v b{color:var(--text);font-weight:600}
+.dl-band{position:relative;width:100%;height:9px;margin-top:.15em;
+         border-radius:5px;overflow:hidden;background:var(--panel2);
+         border:1px solid var(--line)}
+.dl-band i{position:absolute;top:0;bottom:0}
+.dl-band i.night{background:var(--dl-night)}
+.dl-band i.astro{background:var(--dl-astro)}
+.dl-band i.nautical{background:var(--dl-nautical)}
+.dl-band i.civil{background:var(--dl-civil)}
+.dl-band i.day{background:var(--pv)}
+/* where the sun is now - a line across the band with a bead on it.  The
+   ring around it is the panel's own colour, so that it shows up on the
+   amber of the day as well as on the dark of the night. */
+.dl-band .now{position:absolute;top:0;bottom:0;width:3px;background:var(--text);
+              box-shadow:0 0 0 1px var(--panel);z-index:2}
+.dl-band .now::after{content:"";position:absolute;left:50%;top:50%;width:5px;
+                      height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;
+                      background:var(--text);box-shadow:0 0 0 1px var(--panel)}
+.dl-times{position:relative;height:1.2em;margin-top:.1em}
+.dl-times span{position:absolute;transform:translateX(-50%);white-space:nowrap;
+                line-height:1.2;font-family:var(--font-mono);font-size:var(--fsl);
+                color:var(--muted)}
+.dl-times span b{color:var(--text);font-weight:600}
 
 /* the solar forecast */
 .sunrows{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;
@@ -1015,7 +1058,7 @@ function render(s){
   renderUsage(s.usage || {}, s.mini || {});
   renderOctopus(s.octopus || {}, s.mini || {});
   renderToday(s.usage || {});
-  renderWeather(s.weather || {});
+  renderWeather(s.weather || {}, s.server_time);
 
   const tiles=[
     {k:"Solar",c:"var(--pv)",v:fmtP(pv),n:pv>0.02?"generating":"no output"},
@@ -1293,7 +1336,106 @@ function setIcon(el, name){
   el.innerHTML = wxSvg(key);
 }
 
-function renderWeather(w){
+// "HH:MM" as minutes past midnight, or null when there is no time.
+function minsOf(stamp){
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(stamp||""));
+  return m ? Number(m[1])*60 + Number(m[2]) : null;
+}
+
+// The time between two moments, as "9h 56m".
+function spanOf(minutes){
+  const m = Math.max(0, Math.round(minutes||0));
+  return Math.floor(m/60)+"h "+(m%60)+"m";
+}
+
+// The current time where the plant is, in minutes past midnight.  The
+// band is drawn against the place's own clock and the server's clock,
+// so that it agrees with the clock at the top of the screen.
+function placeMinutes(timezone, serverTime){
+  const now = serverTime ? new Date(serverTime*1000) : new Date();
+  if(timezone){
+    try{
+      const parts = new Intl.DateTimeFormat("en-GB", {timeZone:timezone,
+                     hour:"2-digit", minute:"2-digit", hour12:false}).formatToParts(now);
+      let h = 0, m = 0;
+      for(const p of parts){
+        if(p.type === "hour") h = Number(p.value);
+        else if(p.type === "minute") m = Number(p.value);
+      }
+      if(h === 24) h = 0;
+      return h*60 + m;
+    }catch(e){ /* an unknown timezone - the browser's own time will do */ }
+  }
+  return now.getHours()*60 + now.getMinutes();
+}
+
+// The label under the band sits under the sunrise or the sunset, but it
+// has to stay inside the panel, so it is held back at the edges.
+function labelAt(minutes){
+  return Math.max(14, Math.min(86, minutes/1440*100));
+}
+
+// The daylight band: the sun's day, with the twilight either side of
+// it, and a marker showing where the sun is now.
+function renderDaylight(day, timezone, serverTime){
+  const dl = $("wxDaylight");
+  const rise = minsOf(day.sunrise), fall = minsOf(day.sunset);
+  if(rise==null || fall==null || fall<=rise){
+    dl.style.display = "none";
+    return;
+  }
+  dl.style.display = "";
+  const tw = day.twilight || {};
+  const dawn = tw.dawn || {}, dusk = tw.dusk || {};
+  // A twilight the sun never reaches leaves its band out.  Inside the
+  // polar circles there is no astronomical twilight at all.
+  let c = minsOf(dawn.civil), n = minsOf(dawn.nautical), a = minsOf(dawn.astronomical);
+  let c2 = minsOf(dusk.civil), n2 = minsOf(dusk.nautical), a2 = minsOf(dusk.astronomical);
+  if(c==null) c = rise;
+  if(n==null) n = c;
+  if(a==null) a = n;
+  if(c2==null) c2 = fall;
+  if(n2==null) n2 = c2;
+  if(a2==null) a2 = n2;
+  const edges = [0, a, n, c, rise, fall, c2, n2, a2, 1440];
+  const colours = ["night","astro","nautical","civil","day",
+                   "civil","nautical","astro","night"];
+  for(let i=0;i<9;i++){
+    const from = edges[i], to = edges[i+1];
+    const seg = UI.dlSegs[i];
+    seg.className = colours[i];
+    seg.style.left = (from/1440*100)+"%";
+    seg.style.width = (Math.max(0,to-from)/1440*100)+"%";
+  }
+  // where the sun is now
+  const nowM = placeMinutes(timezone, serverTime);
+  const mark = dl.querySelector(".dl-band .now");
+  mark.style.left = Math.max(0, Math.min(100, nowM/1440*100))+"%";
+  // and how much of the day is left
+  const left = nowM <= rise ? "sunrise in "+spanOf(rise-nowM)
+             : nowM >= fall ? "sunset was "+day.sunset
+             : spanOf(fall-nowM)+" of daylight left";
+  const head = dl.querySelector(".dl-head .v");
+  head.textContent = "";
+  const bold = document.createElement("b");
+  bold.textContent = spanOf(fall-rise);
+  head.appendChild(bold);
+  head.appendChild(document.createTextNode(" · "+left));
+  // the two times, sitting under the sunrise and the sunset
+  const times = dl.querySelector(".dl-times");
+  times.textContent = "";
+  [[rise, day.sunrise, "sunrise"], [fall, day.sunset, "sunset"]].forEach(([at, clock, word])=>{
+    const span = document.createElement("span");
+    span.style.left = labelAt(at)+"%";
+    const strong = document.createElement("b");
+    strong.textContent = clock;
+    span.appendChild(strong);
+    span.appendChild(document.createTextNode(" "+word));
+    times.appendChild(span);
+  });
+}
+
+function renderWeather(w, serverTime){
   const days = (w && w.days) || [];
   const cur  = (w && w.current) || {};
   const solar= (w && w.solar) || {};
@@ -1310,9 +1452,25 @@ function renderWeather(w){
     // The last three are the first to go when the screen is small - the
     // temperature, the wind and the rain matter more.
     $("wxKvs").innerHTML = [["Feels like",0],["Wind",0],["Rain now",0],
-                            ["Humidity",1],["Sun",1],["UV index",1]]
-      .map(([k,opt])=>`<div class="kv${opt?" opt":""}"><span class="k">${k}</span><span class="v"></span></div>`).join("");
-    UI.wxKvVals = [...$("wxKvs").querySelectorAll(".v")];
+                            ["Humidity",1],["UV index",1,1]]
+      .map(([k,opt,wide])=>`<div class="kv${opt?" opt":""}${wide?" wide":""}"><span class="k">${k}</span><span class="v"></span></div>`).join("")
+      // The daylight band takes the place of the old sunrise and sunset
+      // row - it says the same thing, and says it with a picture.
+      + `<div class="daylight" id="wxDaylight">
+           <div class="dl-head"><span class="t">Daylight</span><span class="v"></span></div>
+           <div class="dl-band"><span class="now"></span></div>
+           <div class="dl-times"></div>
+         </div>`;
+    UI.wxKvVals = [...$("wxKvs").querySelectorAll(".kv .v")];
+    // The strip is drawn in nine pieces - night, three twilights, the
+    // day, and the twilights again - and they are made once.
+    const band = $("wxDaylight").querySelector(".dl-band");
+    UI.dlSegs = [];
+    for(let i=0;i<9;i++){
+      const seg = document.createElement("i");
+      band.insertBefore(seg, band.firstChild);
+      UI.dlSegs.push(seg);
+    }
     $("wxRows").innerHTML = Array.from({length:7},()=>
       `<div class="sunrow"><span class="d"></span><span class="bar"><i></i></span><span class="v"></span></div>`).join("");
     UI.wxRows = [...$("wxRows").querySelectorAll(".sunrow")];
@@ -1337,10 +1495,12 @@ function renderWeather(w){
     cur.wind!=null ? Math.round(cur.wind)+" "+windUnit+(cur.wind_text?" "+cur.wind_text:"") : "—",
     cur.precipitation!=null ? Number(cur.precipitation).toFixed(1)+" "+precipUnit : "—",
     cur.humidity!=null ? Math.round(cur.humidity)+"%" : "—",
-    (today.sunrise && today.sunset) ? today.sunrise+" – "+today.sunset : "—",
     today.uv!=null ? Number(today.uv).toFixed(1) : "—",
   ];
   kvs.forEach((v,i)=> setText(UI.wxKvVals[i], v));
+  // The daylight band says when the sun rises and sets, and what the
+  // light is doing either side of that.
+  renderDaylight(today, loc.timezone, serverTime);
 
   /* -- the solar forecast --
      Before the array has been fitted against the inverter's own yield,

@@ -32,6 +32,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from . import sun
+
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 
@@ -475,6 +477,87 @@ def _daily_list(raw: dict) -> list[dict]:
     return out
 
 
+def _minutes(stamp: str) -> float | None:
+    """"HH:MM" as minutes past midnight."""
+    try:
+        hours, minutes = str(stamp).split(":")[:2]
+        return int(hours) * 60 + int(minutes)
+    except (TypeError, ValueError):
+        return None
+
+
+def _offset_for(day: str, zone, fallback: float) -> float:
+    """The timezone's distance from UTC, in minutes, for that day.
+
+    The offset in the reply is the one for right now, which is not the
+    same as the one for a day either side of a clock change.
+    """
+    if zone is None:
+        return fallback
+    try:
+        when = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=zone)
+        offset = when.utcoffset() or timedelta(0)
+        return offset.total_seconds() / 60
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _sun_times(day: dict, latitude: float | None, longitude: float | None,
+              zone, fallback_offset: float) -> dict:
+    """The sun's times for one day: sunrise, sunset and the twilight.
+
+    The forecast's own sunrise and sunset are what the slide shows
+    everywhere else, so the twilight is moved to sit around them rather
+    than around the times worked out here - the two never disagree by
+    more than a minute or two, but the slide should not contradict
+    itself.  When the forecast has no sunrise at all, ours is used.
+
+    An empty result means the sun's times are not known, and the slide
+    falls back to plain sunrise and sunset times.
+    """
+    if latitude is None or longitude is None:
+        return {}
+    date = day.get("date") or ""
+    try:
+        when = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return {}
+    times = sun.events((when.year, when.month, when.day), latitude,
+                       longitude, _offset_for(date, zone, fallback_offset))
+    if times.get("sunrise") is None or times.get("sunset") is None:
+        return {}          # the sun does not rise here today
+    rise = _minutes(day.get("sunrise"))
+    fall = _minutes(day.get("sunset"))
+    if rise is not None:
+        shift = rise - times["sunrise"]
+        times["sunrise"] = rise
+        for name in times["dawn"]:
+            if times["dawn"][name] is not None:
+                times["dawn"][name] += shift
+    if fall is not None:
+        shift = fall - times["sunset"]
+        times["sunset"] = fall
+        for name in times["dusk"]:
+            if times["dusk"][name] is not None:
+                times["dusk"][name] += shift
+
+    def at(value: float | None) -> str:
+        # a twilight that runs off the end of the day is held at the
+        # edge rather than wrapped round to the other side of it
+        if value is None:
+            return ""
+        return sun.clock(min(max(value, 0.0), 1440.0))
+
+    return {
+        "sunrise": sun.clock(times["sunrise"]),
+        "sunset": sun.clock(times["sunset"]),
+        "twilight": {
+            "dawn": {name: at(value) for name, value in times["dawn"].items()},
+            "dusk": {name: at(value) for name, value in times["dusk"].items()},
+        },
+    }
+
+
 def parse(raw: dict, name: str = "", tz_name: str | None = None,
           temperature: str = "", wind: str = "") -> dict:
     """The reply, in the shape the dashboard wants.
@@ -544,6 +627,21 @@ def parse(raw: dict, name: str = "", tz_name: str | None = None,
     if today:
         payload["days"] = [day for day in payload["days"]
                            if day["date"] >= today]
+    # The twilight either side of sunrise and sunset is not in the
+    # forecast, so it is worked out here and hung off the day.  It is
+    # what the daylight band on the slide is drawn from.
+    latitude = number(raw.get("latitude"))
+    longitude = number(raw.get("longitude"))
+    zone = _zone(raw.get("timezone"))
+    fallback_offset = (raw.get("utc_offset_seconds") or 0) / 60
+    for day in payload["days"]:
+        times = _sun_times(day, latitude, longitude, zone, fallback_offset)
+        day["twilight"] = times.get("twilight", {})
+        if times:
+            # the forecast's own times are kept, so that the slide and
+            # the week cards say the same thing
+            day["sunrise"] = times["sunrise"]
+            day["sunset"] = times["sunset"]
     return payload
 
 

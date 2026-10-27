@@ -20,7 +20,7 @@ A standalone web dashboard for a FoxESS (Foxconn) solar installation.
 | ![Flow at 800x480](preview-800x480-flow.png) | |
 | **Flow** diagram — the compact left-to-right alternative. | |
 | ![Weather at 800x480](preview-weather-slide.png) | |
-| **Weather** slide — the conditions now, the solar forecast for your own roof, and the week ahead. | |
+| **Weather** slide — the conditions now, the daylight band, the solar forecast for your own roof, and the week ahead. | |
 
 Switch between them in **Settings → Power flow diagram**, or set
 `"display": {"diagram": "rings" | "flow"}` in `config.json`.
@@ -258,6 +258,37 @@ press **Find**; the gazetteer only knows towns and villages, so a hamlet
 or a street will not be found — use the town nearby. The latitude and
 longitude are filled in for you, and **Save and test the forecast** says
 what came back *and saves it*, so the slide starts working straight away.
+
+### The daylight band
+
+The RIGHT NOW panel carries a strip of the whole day, from midnight to
+midnight, with the twilight either side of the sun and a bead on it
+showing where the sun is now:
+
+```
+DAYLIGHT                    9h 55m · 5h 22m of daylight left
+▓▓▓▓▓░░▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░▒▒░░▓▓▓▓▓
+     06:47 sunrise                    16:42 sunset
+```
+
+The colours are the light: black for the night, then the three
+twilights — astronomical, nautical and civil — and then the amber of
+the day.
+
+The forecast gives sunrise and sunset, but not the twilight around them,
+so that is worked out locally by `foxess/sun.py` — the standard solar
+position formula, and nothing outside the standard library. The times it
+works out were checked against the forecast service's own sunrise and
+sunset for ten places and days, from Welwyn Garden City to Sydney to
+Reykjavík: the worst difference is under three minutes, and usually
+under one.
+
+The times are in the plant's own timezone, not the browser's, and they
+follow the server's clock, so they agree with the clock at the top of
+the screen. Where the sun does not rise — inside the polar circles, or
+at the height of a polar night — the band is left off rather than
+guessed at, and so is it on the smaller screens, where there is no room
+for it.
 
 ### The units you chose
 
@@ -755,7 +786,7 @@ foxess-dashboard/
 python3 -m unittest discover -s tests -v
 ```
 
-306 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
+371 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
 direction, grid import vs export, the device-level timestamp quirk of the v1
 real/query endpoint, the Open API signature, secret masking and file
 permissions — and the parts that are easy to get wrong: watts against
@@ -763,7 +794,9 @@ kilowatt-hours, the day the meter readings are missing, the export meter
 point, which of FoxESS's two solar figures is the one the app shows, the
 Octopus Mini's GraphQL calls and running counters, and the solar
 calibration — the weather codes, the daily irradiation, the day boundary
-and the fitting of the array against the inverter's own yield.
+and the fitting of the array against the inverter's own yield. The sun's
+own times are checked against the forecast service's sunrise and sunset
+for ten places and days, which is what the daylight band is drawn from.
 
 The font and the ESP32 renderer are verified visually — `test_font.py` prints
 every glyph as ASCII art, and `test_esp32_render.py` renders the ESP32 screen

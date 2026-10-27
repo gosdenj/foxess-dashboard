@@ -47,6 +47,7 @@ from foxess.config import ConfigStore  # noqa: E402
 from foxess.server import serve  # noqa: E402
 from foxess.state import TOTAL_VARIABLES, DashboardState  # noqa: E402
 from foxess import weather  # noqa: E402
+from foxess import sun  # noqa: E402
 from foxess.ws import FoxESSLive  # noqa: E402
 
 #: Datalogger type is encoded in the module serial number.
@@ -1198,6 +1199,32 @@ def collect_weather(state: DashboardState, config: ConfigStore,
     return payload
 
 
+#: Where the demo pretends to be.  The sun's times are worked out for it
+#: in earnest, so that the daylight band has something honest to show.
+DEMO_LATITUDE = 51.8
+DEMO_LONGITUDE = -0.19
+
+
+def demo_sun(date, zone) -> dict:
+    """The sun's times for the demo place, in the shape the slide wants.
+
+    The real ones are worked out rather than made up, so that the
+    daylight band on the weather slide has something honest to show.
+    """
+    offset = datetime(date.year, date.month, date.day,
+                      tzinfo=zone).utcoffset().total_seconds() / 60
+    times = sun.events((date.year, date.month, date.day),
+                       DEMO_LATITUDE, DEMO_LONGITUDE, offset)
+    return {
+        "sunrise": sun.clock(times["sunrise"]),
+        "sunset": sun.clock(times["sunset"]),
+        "twilight": {
+            "dawn": {name: sun.clock(value) for name, value in times["dawn"].items()},
+            "dusk": {name: sun.clock(value) for name, value in times["dusk"].items()},
+        },
+    }
+
+
 def demo_weather(temperature: str = "celsius", wind: str = "kmh") -> dict:
     """A made-up forecast, so the slide can be seen without a location.
 
@@ -1213,9 +1240,10 @@ def demo_weather(temperature: str = "celsius", wind: str = "kmh") -> dict:
     conditions = [(3, "Overcast", 1.4), (0, "Clear sky", 3.1),
                   (2, "Partly cloudy", 2.6), (61, "Light rain", 0.9),
                   (45, "Fog", 0.5), (3, "Overcast", 1.8), (1, "Mainly clear", 3.4)]
+    zone = ZoneInfo("Europe/London") if ZoneInfo else timezone.utc
     days = []
-    base = datetime.now(timezone.utc).replace(hour=12, minute=0, second=0,
-                                              microsecond=0)
+    base = datetime.now(zone).replace(hour=12, minute=0, second=0,
+                                      microsecond=0)
     for index, (code, text, poa) in enumerate(conditions):
         when = base + timedelta(days=index)
         days.append({
@@ -1231,15 +1259,18 @@ def demo_weather(temperature: str = "celsius", wind: str = "kmh") -> dict:
             "wind": weather.convert_wind(12 + index * 3, wind),
             "wind_dir": 215.0,
             "wind_text": "SW",
-            "sunrise": "07:12",
-            "sunset": "17:54",
+            # the sun's times are worked out rather than made up, so that
+            # the daylight band has something honest to show
+            **demo_sun(when.date(), zone),
             "uv": 2.1,
             "poa": poa,
             "pv": round(poa * 4.7, 2),
         })
     return {
-        "location": {"name": "Demo - Welwyn Garden City", "latitude": 51.8,
-                     "longitude": -0.19, "timezone": "Europe/London"},
+        "location": {"name": "Demo - Welwyn Garden City",
+                     "latitude": DEMO_LATITUDE,
+                     "longitude": DEMO_LONGITUDE,
+                     "timezone": "Europe/London"},
         "units": {"temperature": weather.temperature_unit(temperature),
                   "wind": weather.wind_unit(wind),
                   "precipitation": "mm"},
