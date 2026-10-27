@@ -357,6 +357,10 @@ class SlideRotator:
         self.config = config
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self.run, daemon=True, name="slides")
+        #: Set when somebody has moved the slide by hand - a swipe, or the
+        #: settings page.  The clock starts again for the slide they chose,
+        #: so it is not taken away from them a moment later.
+        self.wake = threading.Event()
 
     def start(self) -> None:
         self.thread.start()
@@ -384,13 +388,17 @@ class SlideRotator:
             deadline = time.time() + interval
             changed = False
             while time.time() < deadline and not self.stop.is_set():
-                self.stop.wait(0.5)
-                # The interval may have been changed in the settings.  Stop
-                # there and then, and do not move the slide on the way
-                # out - the user has just put it where they want it.
-                if self._interval() != interval:
-                    changed = True
-                    break
+                if self.wake.wait(0.5):
+                    self.wake.clear()
+                    # The interval may have been changed in the settings.  Stop
+                    # there and then, and do not move the slide on the way
+                    # out - the user has just put it where they want it.
+                    if self._interval() != interval:
+                        changed = True
+                        break
+                    # Otherwise somebody has moved the slide by hand, and
+                    # the clock starts again for the slide they chose.
+                    deadline = time.time() + interval
             if not self.stop.is_set() and not changed:
                 self.state.advance_slide()
 
@@ -1665,7 +1673,8 @@ def main() -> int:
         print("DEMO MODE - synthetic data, no credentials needed")
         try:
             serve(state, host, port, config=config,
-                  on_settings_saved=lambda saved: demo_wake.set())
+                  on_settings_saved=lambda saved: demo_wake.set(),
+                  on_slide_changed=rotator.wake.set)
         finally:
             rotator.shutdown()
             stop.set()
@@ -1697,7 +1706,8 @@ def main() -> int:
 
     try:
         serve(state, host, port, config=config,
-              on_settings_saved=controller.apply_settings)
+              on_settings_saved=controller.apply_settings,
+              on_slide_changed=rotator.wake.set)
     finally:
         rotator.shutdown()
         controller.shutdown()

@@ -42,6 +42,13 @@ body{background:var(--bg);color:var(--text);
      line-height:1.4;
      -webkit-font-smoothing:antialiased;
      -moz-osx-font-smoothing:grayscale;
+     /* The dashboard is one screen and never scrolls, so the browser is
+        told to leave a swipe to the page: a swipe turns the deck. */
+     touch-action:none;
+     /* There is nothing here to copy, and a drag should not leave a row
+        of numbers highlighted behind it. */
+     -webkit-user-select:none;
+     user-select:none;
 }
 .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 
@@ -1253,7 +1260,7 @@ let GHOST = null;
    final state: the rule for a slide stays matched while that slide is
    showing, so the animation would not run again on the next change of
    slide.  Starting it here means every change gets one. */
-function slideTransition(ghost){
+function slideTransition(ghost, way){
   const dash = $("dash");
   /* Someone who has asked for less movement should not get any. */
   const still = window.matchMedia
@@ -1276,8 +1283,11 @@ function slideTransition(ghost){
   if(!dash || !dash.animate || still) return;
   if(SLIDE_ANIM) SLIDE_ANIM.cancel();
   dash.classList.add("dealing");
+  /* The slide arrives from the side it was asked for: the next one
+     comes in from the right, the one before from the left. */
+  const from = (way < 0) ? "-100%" : "100%";
   SLIDE_ANIM = dash.animate(
-    [{transform:"translateX(100%)", opacity:.8},
+    [{transform:"translateX("+from+")", opacity:.8},
      {transform:"translateX(0)", opacity:1}],
     {duration:420, easing:"cubic-bezier(.22,.61,.36,1)"});
   SLIDE_ANIM.onfinish = () => dash.classList.remove("dealing");
@@ -1310,8 +1320,102 @@ function applySlide(slide){
      is how it stays showing the old slide. */
   if(dash) dash.dataset.slide = slide.name;
 
-  slideTransition(ghost);
+  slideTransition(ghost, SWIPE_WAY);
+  /* The direction has been used, so the next change of slide - the
+     rotation's own - comes in from the right as usual. */
+  SWIPE_WAY = 0;
 }
+
+/* ---- swiping between slides ---------------------------------------------
+   A swipe sideways turns the deck: left for the next slide, right for the
+   one before.  It is the gesture a touch screen is for, and on a wall
+   display it is quicker than waiting for the rotation.
+
+   The gesture is measured rather than guessed.  It has to travel far
+   enough sideways, and further sideways than up and down, or it is a tap
+   and not a swipe.  A swipe that starts on a button is left alone, so
+   that the gear in the corner still opens the settings.
+
+   Pointer events are used rather than touch events, so that a mouse
+   drag does the same thing - which is how it can be tried out on a
+   desktop before it is used on the panel. */
+
+/*: How far the finger has to travel, in pixels. */
+const SWIPE_DISTANCE = 60;
+/*: How much further sideways than up and down a swipe has to be. */
+const SWIPE_SLOP = 1.4;
+
+/*: The gesture in progress. */
+let SWIPE = null;
+/*: Which way the slide was asked for: 1 for the next, -1 for the one
+   before.  Kept until the slide actually changes. */
+let SWIPE_WAY = 0;
+
+function swipeIsOne(g){
+  return Math.abs(g.dx) >= SWIPE_DISTANCE
+      && Math.abs(g.dx) > Math.abs(g.dy) * SWIPE_SLOP;
+}
+
+function swipeStart(e){
+  /* A mouse only swipes with its left button, and a second finger on a
+     touch screen is not a swipe either. */
+  if(e.pointerType === "mouse" && e.button !== 0) return;
+  if(!e.isPrimary) return;
+  /* Buttons, links and the like are left to themselves. */
+  const target = e.target;
+  if(target && target.closest
+     && target.closest("a,button,input,select,textarea,label")) return;
+  SWIPE = {id:e.pointerId, x:e.clientX, y:e.clientY, dx:0, dy:0};
+  /* The finger keeps the gesture even if it wanders off the element it
+     started on. */
+  try{ e.target.setPointerCapture(e.pointerId); }catch(_){}
+}
+
+function swipeMove(e){
+  if(!SWIPE || e.pointerId !== SWIPE.id) return;
+  SWIPE.dx = e.clientX - SWIPE.x;
+  SWIPE.dy = e.clientY - SWIPE.y;
+  /* Once it is clear that this is a swipe, the browser is told to keep
+     its hands off - otherwise it tries to scroll or to select the text. */
+  if(swipeIsOne(SWIPE) && e.cancelable) e.preventDefault();
+}
+
+function swipeEnd(e){
+  if(!SWIPE || e.pointerId !== SWIPE.id) return;
+  const dx = SWIPE.dx, dy = SWIPE.dy;
+  SWIPE = null;
+  if(!swipeIsOne({dx:dx, dy:dy})) return;
+  /* Left is the next slide, right the one before. */
+  goSlide(dx < 0 ? 1 : -1);
+}
+
+/* Ask the server for the next slide, or the one before.
+   The slide is shown straight away, because the server's answer comes
+   round the loop and a gesture that takes half a second to answer does
+   not feel like it was heard.  The server has the last word: if it says
+   something different, the slide changes again. */
+function goSlide(step){
+  SWIPE_WAY = step;
+  const sl = (window.SNAP && window.SNAP.slide) || {};
+  const names = sl.names || [];
+  if(names.length > 1){
+    const index = (sl.index||0) + step;
+    applySlide({name: names[((index % names.length) + names.length)
+                              % names.length]});
+  } else {
+    /* Nowhere to go, so there is no direction to remember. */
+    SWIPE_WAY = 0;
+  }
+  fetch("/api/slide", {method:"POST",
+                       headers:{"Content-Type":"application/json"},
+                       body: JSON.stringify({step:step})})
+    .catch(() => { SWIPE_WAY = 0; });
+}
+
+window.addEventListener("pointerdown", swipeStart, {passive:true});
+window.addEventListener("pointermove", swipeMove, {passive:false});
+window.addEventListener("pointerup", swipeEnd);
+window.addEventListener("pointercancel", () => { SWIPE = null; });
 
 /* ---- the weather slide ------------------------------------------------
    The icons are drawn here rather than fetched, so the slide needs

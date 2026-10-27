@@ -106,6 +106,18 @@ class DashboardState:
             if len(self._slide_names) > 1:
                 self._slide_index = (self._slide_index + 1) % len(self._slide_names)
 
+    def step_slide(self, delta: int) -> None:
+        """Move a step through the rotation, forwards or backwards.
+
+        A swipe on the screen asks for the next slide or the one before,
+        and the rotation wraps round at both ends, so the order is the
+        same whichever way it is entered.
+        """
+        with self._lock:
+            count = len(self._slide_names)
+            if count > 1:
+                self._slide_index = (self._slide_index + delta) % count
+
     def set_slide(self, name: str) -> None:
         """Jump to a named slide, if it is in the rotation."""
         with self._lock:

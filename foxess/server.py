@@ -38,6 +38,10 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 #: Called after settings change so the caller can re-wire live connections.
 ApplyCallback = Callable[[dict], None]
 
+#: Called when a slide is moved by hand, so the rotation can give it a full
+#: interval rather than taking it away again straight away.
+SlideCallback = Callable[[], None]
+
 #: Errors that mean "the client went away", not "the server is broken".
 #: A browser that reloads the page, reconnects the event stream or loses
 #: Wi-Fi closes its socket with a TCP reset; that is routine.
@@ -111,6 +115,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     state: DashboardState = None            # type: ignore[assignment]
     config = None                           # type: ignore[assignment]
     on_settings_saved: ApplyCallback | None = None
+    on_slide_changed: SlideCallback | None = None
     server_version = "FoxESSDashboard/2.0"
     protocol_version = "HTTP/1.1"
 
@@ -232,19 +237,39 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._json({"ok": True, "settings": self.config.masked()})
 
     def _do_slide(self) -> None:
-        """Jump the rotation to a named slide."""
+        """Move the rotation: to a named slide, or a step either way.
+
+        A swipe on the screen asks for a step - forwards for the next
+        slide, backwards for the one before - so the deck turns the same
+        way round whichever end it is entered from.
+        """
         try:
             length = int(self.headers.get("Content-Length") or 0)
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             self._json({"error": "invalid JSON"}, 400)
             return
+        if "step" in payload:
+            step = payload.get("step")
+            if not isinstance(step, int) or isinstance(step, bool) or step not in (-1, 1):
+                self._json({"error": "expected {'step': 1} or {'step': -1}"}, 400)
+                return
+            self.state.step_slide(step)
+            self._slide_moved()
+            self._json({"ok": True, "slide": self.state.slide()})
+            return
         name = payload.get("name") or ""
         if not isinstance(name, str):
             self._json({"error": "expected {'name': '...'}"}, 400)
             return
         self.state.set_slide(name)
+        self._slide_moved()
         self._json({"ok": True, "slide": self.state.slide()})
+
+    def _slide_moved(self) -> None:
+        """Tell the rotation that the slide was moved by hand."""
+        if self.on_slide_changed is not None:
+            self.on_slide_changed()
 
     def _test_mini(self, email: str, password: str,
                     account_number: str, api_key: str = "") -> str:
@@ -708,7 +733,8 @@ class QuietServer(ThreadingHTTPServer):
 
 
 def handler_class(state: DashboardState, config=None,
-                  on_settings_saved: ApplyCallback | None = None):
+                  on_settings_saved: ApplyCallback | None = None,
+                  on_slide_changed: SlideCallback | None = None):
     """The request handler, bound to a state and a config.
 
     A plain function stored on a class becomes a BOUND method when it is
@@ -722,12 +748,17 @@ def handler_class(state: DashboardState, config=None,
         attrs["on_settings_saved"] = (
             staticmethod(on_settings_saved)
             if inspect.isfunction(on_settings_saved) else on_settings_saved)
+    if on_slide_changed is not None:
+        attrs["on_slide_changed"] = (
+            staticmethod(on_slide_changed)
+            if inspect.isfunction(on_slide_changed) else on_slide_changed)
     return type("BoundHandler", (DashboardHandler,), attrs)
 
 
 def serve(state: DashboardState, host: str = "127.0.0.1", port: int = 8765,
-          config=None, on_settings_saved: ApplyCallback | None = None) -> None:
-    handler = handler_class(state, config, on_settings_saved)
+          config=None, on_settings_saved: ApplyCallback | None = None,
+          on_slide_changed: SlideCallback | None = None) -> None:
+    handler = handler_class(state, config, on_settings_saved, on_slide_changed)
     httpd = QuietServer((host, port), handler)
     httpd.daemon_threads = True
     print(f"\n  FoxESS dashboard -> http://{host}:{port}")

@@ -228,6 +228,27 @@ The **header does not move**. It sits outside the slide altogether, which is
 also why it is the right place for the clock and the date: it is the one
 part of the dashboard that stays put while everything below it changes.
 
+### Swiping between the slides
+
+The dashboard is on a touch screen, so a **sideways swipe turns the deck**:
+swipe left for the next slide, right for the one before. The rotation
+wraps round at both ends, so the order is the same whichever way it is
+entered from.
+
+The gesture is measured rather than guessed. It has to travel at least 60
+pixels sideways, and further sideways than up and down, or it is a tap and
+not a swipe. A swipe that starts on a button is left alone, so the gear in
+the corner still opens the settings.
+
+The slide arrives from the side it was swiped from — the next one comes in
+from the right, the one before from the left — and it is shown **straight
+away**, rather than waiting for the server's answer to come round the loop.
+The server has the last word: if it says something different, the slide
+changes again.
+
+A slide you have swiped to is not taken away from you a moment later: it
+gets the full rotation interval, and the rotation carries on from there.
+
 ### The header carries the date
 
 The clock shows the time and the date together:
@@ -751,7 +772,7 @@ logged unless `FOXESS_DEBUG=1` is set. Genuine bugs still print a traceback.
 | `/api/state` | JSON snapshot of everything on screen |
 | `/api/settings` | GET = current settings (secrets masked), POST = save |
 | `/api/settings/export` | GET = the full settings, secrets included, for backup |
-| `/api/slide` | POST = jump to a named slide |
+| `/api/slide` | POST = jump to a named slide, or `{"step": 1}` / `{"step": -1}` for the next or the one before |
 | `/api/octopus/test` | POST = try the Octopus credentials and say what was found |
 | `/api/weather/locate` | POST = look a place up by name |
 | `/api/weather/test` | POST = try the weather settings and say what came back |
@@ -818,7 +839,7 @@ foxess-dashboard/
 python3 -m unittest discover -s tests -v
 ```
 
-392 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
+412 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
 direction, grid import vs export, the device-level timestamp quirk of the v1
 real/query endpoint, the Open API signature, secret masking and file
 permissions — and the parts that are easy to get wrong: watts against
@@ -830,7 +851,10 @@ and the fitting of the array against the inverter's own yield. The sun's
 own times are checked against the forecast service's sunrise and sunset
 for ten places and days, which is what the daylight band is drawn from.
 Yesterday's figures are checked against the inverter's register, day by
-day, and the meter is not asked for a part of a day.
+day, and the meter is not asked for a part of a day.  The swipe that turns
+the deck is checked in a real browser, in both directions, and so is the
+gesture that is *not* one - a short drag, a vertical one, and one that
+starts on the gear.
 
 The font and the ESP32 renderer are verified visually — `test_font.py` prints
 every glyph as ASCII art, and `test_esp32_render.py` renders the ESP32 screen

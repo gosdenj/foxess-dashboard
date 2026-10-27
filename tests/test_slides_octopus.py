@@ -120,8 +120,14 @@ class TestSlideTransition(unittest.TestCase):
 
     def test_the_new_slide_comes_in_from_the_right(self):
         body = self._function("slideTransition")
-        self.assertIn('transform:"translateX(100%)"', body)
+        self.assertIn('const from = (way < 0) ? "-100%" : "100%"', body)
+        self.assertIn('transform:"translateX("+from+")"', body)
         self.assertIn('transform:"translateX(0)"', body)
+
+    def test_the_slide_arrives_from_the_side_it_was_swiped_from(self):
+        """A swipe back brings the slide in from the left."""
+        body = self._function("applySlide")
+        self.assertIn("slideTransition(ghost, SWIPE_WAY)", body)
 
     def test_the_transition_is_skipped_for_someone_who_asked_for_less_movement(self):
         body = self._function("slideTransition")
