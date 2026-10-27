@@ -79,9 +79,45 @@ pushed:
 `[skip ci]` is there so that commit does not start the workflow all over
 again. It is an empty commit — nothing in it but the message.
 
-If Portainer happens to poll in the window between the push and the
-image being ready, it redeploys the old image and then redeploys again
-when the signal commit arrives, so the pipeline heals itself either way.
+If Portainer does happen to poll in the window before the image is
+ready, it redeploys the old image and then redeploys again when the
+signal commit arrives, so the pipeline heals itself either way.
+
+### A push that does not start the workflow
+
+**Not every push starts a workflow.** A push made with an OAuth token —
+the kind `gh auth login` and many editors put in the keychain — does
+not, and the image for that commit is then never built. Nothing says
+so: the push succeeds, the repository moves, and the image simply
+never appears. The dashboard sits on the old version until somebody
+happens to commit again.
+
+A **classic personal access token** does start the workflow, with the
+`repo` scope.
+
+Either way the workflow does not depend on it any more:
+
+- it asks the registry whether the image for this commit is already
+  published, and does nothing if it is
+- it also runs **every four hours**, which catches the push that did
+  not trigger it
+
+So a missed trigger costs a few hours, not forever.
+
+### Polling, and why not a webhook
+
+Portainer can also be told to redeploy on demand through a **webhook**,
+which is the tidier mechanism — a workflow calls it the moment the image
+is published, and there is no polling at all.
+
+A webhook does not work here, though. The target is on a private
+network: `minix.local` is a LAN address, and the runner that builds the
+image is on the internet and cannot reach it. The workflow can push to
+the registry, because the registry is public; it cannot call a webhook
+on someone's home network.
+
+So the stack polls every five minutes instead, and the signal commit is
+what tells it there is something to fetch.
 
 ## Before you start
 
