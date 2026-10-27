@@ -68,19 +68,28 @@ def _now(tz: str = "Europe/London") -> datetime:
         return datetime.now(timezone.utc)
 
 
+def local_now(timezone_name: str = "Europe/London") -> datetime:
+    """Now, on the clock where the house is.
+
+    The meter settles on the UK clock, not on UTC, so the two are an
+    hour apart for half the year.  Everything that asks "what time is it
+    on the meter" asks here.
+    """
+    if ZoneInfo is not None:
+        try:
+            return datetime.now(ZoneInfo(timezone_name))
+        except Exception:  # noqa: BLE001 - no timezone database
+            pass
+    return datetime.now(timezone.utc)
+
+
 def today_start(timezone_name: str = "Europe/London") -> datetime:
     """Midnight this morning, local time, as UTC.
 
     "Today" means the local day - the meter settles on the UK clock, not
     on UTC, so the two are an hour apart for half the year.
     """
-    if ZoneInfo is not None:
-        try:
-            local = datetime.now(ZoneInfo(timezone_name))
-        except Exception:  # noqa: BLE001 - no timezone database
-            local = datetime.now(timezone.utc)
-    else:
-        local = datetime.now(timezone.utc)
+    local = local_now(timezone_name)
     return local.replace(hour=0, minute=0, second=0,
                          microsecond=0).astimezone(timezone.utc)
 
@@ -365,23 +374,44 @@ class OctopusMini:
         the difference between the counter now and the counter at
         midnight.  The readings are taken every half hour, which is what
         the chart wants as well.
+
+        Yesterday comes back with it, so that the slide can say how today
+        is going against it.  The meter only keeps a day or two of
+        half-hourly readings, so yesterday is only reported when the
+        whole of it is still there.
         """
         now = datetime.now(timezone.utc)
         # the local day, not the UTC one - "today" should mean midnight
         # where the house is
+        local = local_now(self.timezone_name)
         start = today_start(self.timezone_name).astimezone(timezone.utc)
-        rows = self.telemetry(start - timedelta(hours=1), now, "HALF_HOURLY")
+        # Yesterday's midnight, worked out on the local calendar, so that
+        # a day the clocks changed on still splits in the right place.
+        midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday = (midnight - timedelta(days=1)).astimezone(timezone.utc)
+        # The meter keeps a day or two of readings and no more, so the
+        # windows are tried in order of usefulness and the first one
+        # that answers is used.  Today matters more than yesterday, so
+        # the shorter windows come after it.
         partial = False
+        rows: list[dict] = []
+        for begin, is_partial in ((yesterday - timedelta(hours=1), False),
+                                  (start - timedelta(hours=1), False),
+                                  (now - timedelta(hours=6), True)):
+            try:
+                rows = self.telemetry(begin, now, "HALF_HOURLY")
+            except OctopusError:
+                rows = []
+            if rows:
+                partial = is_partial
+                break
         if not rows:
-            # The Mini may not keep a whole day of half-hourly readings,
-            # so try a shorter window rather than show nothing at all.
-            rows = self.telemetry(now - timedelta(hours=6), now, "HALF_HOURLY")
-            partial = True
-            if not rows:
-                return {"series": [], "readings": 0, "partial": True}
+            return {"series": [], "readings": 0, "partial": True}
         _add_deltas(rows)
         today_rows = [r for r in rows
                       if r.get("read_at") and _as_utc(r["read_at"]) >= start]
+        yesterday_rows = [r for r in rows
+                          if r.get("read_at") and yesterday <= _as_utc(r["read_at"]) < start]
         consumption = sum(r.get("consumption_delta") or 0.0 for r in today_rows)
         export = sum(r.get("export_delta") or 0.0 for r in today_rows)
         cost = sum(r.get("cost") or 0.0 for r in today_rows)
@@ -399,7 +429,7 @@ class OctopusMini:
         peak_out = max(today_rows,
                        key=lambda r: r.get("export_delta") or 0.0,
                        default=None)
-        return {
+        out = {
             "consumption_kwh": round(consumption / 1000.0, 3),
             "export_kwh": round(export / 1000.0, 3),
             "cost": round(cost / 100.0, 2),
@@ -415,6 +445,22 @@ class OctopusMini:
             if peak_out else 0.0,
             "peak_export_at": peak_out.get("read_at") if peak_out else None,
         }
+        # Yesterday, when the meter still holds the whole of it.  A part
+        # of a day is worse than none: it would be compared with today
+        # as though it were the whole thing.
+        if len(yesterday_rows) >= 40:
+            out["yesterday"] = {
+                "cost": round(sum(r.get("cost") or 0.0
+                                  for r in yesterday_rows) / 100.0, 2),
+                "consumption_kwh": round(
+                    sum(r.get("consumption_delta") or 0.0
+                        for r in yesterday_rows) / 1000.0, 3),
+                "export_kwh": round(
+                    sum(r.get("export_delta") or 0.0
+                        for r in yesterday_rows) / 1000.0, 3),
+                "readings": len(yesterday_rows),
+            }
+        return out
 
 
 def _add_deltas(rows: list[dict]) -> None:

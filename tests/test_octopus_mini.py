@@ -459,15 +459,20 @@ class TestMiniToday(unittest.TestCase):
     def test_today_is_the_local_day_not_the_utc_one(self):
         """The Mini's counters are read from local midnight onwards."""
         mini = self._mini_with([])
-        with mock.patch("foxess.octopus.today_start") as fake_start:
-            fake_start.return_value = datetime(2026, 10, 26, 0, 0,
+        # a summer's morning, so the local clock is an hour ahead of UTC
+        local = datetime(2026, 7, 15, 9, 30, tzinfo=ZoneInfo("Europe/London"))
+        with mock.patch("foxess.octopus.today_start") as fake_start, \
+                mock.patch("foxess.octopus.local_now", return_value=local):
+            fake_start.return_value = datetime(2026, 7, 14, 23, 0,
                                                tzinfo=timezone.utc)
             mini.today()
         self.assertEqual(fake_start.call_args[0][0], "Europe/London")
-        # the query starts an hour early, so the counter just before
-        # midnight is caught and the day's energy is a true difference
+        # the query starts an hour before yesterday's midnight, so the
+        # counter just before it is caught and yesterday's energy is a
+        # true difference - yesterday's midnight is an hour before
+        # midnight UTC, and the hour before that is the start of the query
         start = mini.telemetry.call_args_list[0][0][0]
-        self.assertEqual(start, datetime(2026, 10, 25, 23, 0,
+        self.assertEqual(start, datetime(2026, 7, 13, 22, 0,
                                           tzinfo=timezone.utc))
 
     def test_today_start_is_local_midnight(self):
@@ -533,9 +538,13 @@ class TestMiniToday(unittest.TestCase):
                                              tzinfo=timezone.utc)
             fake.side_effect = datetime
             mini.today()
-        # the first call is from midnight, the second is the fallback
-        self.assertEqual(len(mini.telemetry.call_args_list), 2)
+        # the first call reaches back to yesterday, for the comparison;
+        # then today alone; then a short window, so that something is
+        # shown rather than nothing
+        self.assertEqual(len(mini.telemetry.call_args_list), 3)
         self.assertEqual(mini.telemetry.call_args_list[1][0][0],
+                         datetime(2026, 10, 25, 23, 0, tzinfo=timezone.utc))
+        self.assertEqual(mini.telemetry.call_args_list[2][0][0],
                          datetime(2026, 10, 26, 6, 0, tzinfo=timezone.utc))
 
 

@@ -150,6 +150,16 @@ h1 .sub{color:var(--dim);font-weight:400;font-size:var(--fsl);margin-left:.5em}
 .tile .v small{font-size:.45em;color:var(--dim);font-weight:500;margin-left:.2em}
 .tile .note{color:var(--dim);font-size:var(--fsl);margin-top:.1em;
             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The same figure, one day back.  It is there to be read against the
+   number above it, so it is kept small and quiet rather than competing
+   with it.  The word and the number are on separate lines, so that the
+   number can carry its unit without being cut short. */
+.tile .cmp{margin-top:.3em;display:flex;flex-direction:column;align-items:flex-start;
+           gap:.05em;white-space:nowrap;overflow:hidden}
+.tile .cmp .cl{color:var(--dim);font-size:.85em;line-height:1}
+.tile .cmp .cv{color:var(--muted);font-size:var(--fsl);line-height:1.15;
+               font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.tile .cmp .cv small{font-size:.8em;color:var(--dim);margin-left:.2em}
 
 /* ---- gauge ---- */
 .gauge{flex:none;display:flex;align-items:center;gap:var(--gap);justify-content:center}
@@ -417,7 +427,7 @@ body .dash[data-slide="usage"] .today{display:flex}
 .octopus .tiles .tile{justify-content:center}
 .octopus .tiles .tile .v{font-size:clamp(19px,2.1vmin,26px)}
 .today .tiles{grid-template-columns:repeat(6,minmax(0,1fr));flex:1 1 auto;min-height:0}
-.today .tiles .tile{justify-content:center}
+.today .tiles .tile{justify-content:center;display:flex;flex-direction:column}
 .today .tiles .tile .v{font-size:clamp(17px,2vmin,26px)}
 .panel .hint{color:var(--dim);font-size:var(--fsl);margin-top:.5em;flex:none;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1849,6 +1859,10 @@ function renderToday(o){
   const OCT = (window.SNAP && window.SNAP.octopus) || {};
   const MINI = (window.SNAP && window.SNAP.mini) || {};
   const miniToday = MINI.today || {};
+  /* Yesterday, from the inverter's own register for the energy figures
+     and from the meter for the cost. */
+  const Y = (o && o.yesterday) || {};
+  const miniY = miniToday.yesterday || {};
   const g = (k, d) => (t[k]!=null ? fmtP(t[k]) : "\u2014");
   /* The share of the solar that stayed on site.  The old figure was
      (house - grid in) / house, which collapses to zero whenever the
@@ -1856,22 +1870,41 @@ function renderToday(o){
   const solar = t.pv||0;
   const kept = solar>0.05 ? Math.max(0, Math.min(100,
       Math.round(100*(solar - (t.grid_out||0))/solar))) : null;
+  /* And the same share for yesterday. */
+  const ySolar = Y.pv||0;
+  const keptY = ySolar>0.05 ? Math.max(0, Math.min(100,
+      Math.round(100*(ySolar - (Y.grid_out||0))/ySolar))) : null;
+  /* Yesterday's figure, in the quiet hand.  The word and the number are
+     on separate lines, and the number carries the same unit as the
+     figure above it - kWh, a percentage, or pounds. */
+  const gy = (v, u, d) => (v==null) ? ""
+      : "<span class='cl'>yesterday</span><span class='cv'>" + num(v, d)
+        + (u ? "<small>" + u + "</small>" : "") + "</span>";
+  const gcost = (v) => (v==null) ? ""
+      : "<span class='cl'>yesterday</span><span class='cv'>"
+        + "\u00a3" + num(v, 2) + "</span>";
   const tiles = [
-    {k:"Solar", c:"var(--pv)", v:g("pv"), u:"kWh", n:"generated"},
-    {k:"House", c:"var(--load)", v:g("house"), u:"kWh", n:"used"},
-    {k:"Battery", c:"var(--bat)", v:g("batt_out"), u:"kWh", n:"discharged"},
-    {k:"Grid", c:"var(--grid)", v:g("grid_in"), u:"kWh", n:"imported"},
+    {k:"Solar", c:"var(--pv)", v:g("pv"), u:"kWh", n:"generated",
+     y:gy(Y.pv, "kWh", 2)},
+    {k:"House", c:"var(--load)", v:g("house"), u:"kWh", n:"used",
+     y:gy(Y.house, "kWh", 2)},
+    {k:"Battery", c:"var(--bat)", v:g("batt_out"), u:"kWh", n:"discharged",
+     y:gy(Y.batt_out, "kWh", 2)},
+    {k:"Grid", c:"var(--grid)", v:g("grid_in"), u:"kWh", n:"imported",
+     y:gy(Y.grid_in, "kWh", 2)},
     {k:"Self-used", c:"var(--flux)", v:kept!=null?kept:"\u2014", u:"%",
-     n:"of your solar"},
+     n:"of your solar", y:gy(keptY, "%", 0)},
     {k:"Cost today", c:"var(--flux)",
      v:(miniToday.cost!=null) ? "\u00a3"+miniToday.cost.toFixed(2)
         : (OCT.cost!=null) ? "\u00a3"+OCT.cost.toFixed(2) : "\u2014",
      n:(miniToday.cost!=null) ? "live from the meter"
-        : (OCT.cost!=null) ? (OCT.cost<0 ? "credit balance" : "so far") : "meter"},
+        : (OCT.cost!=null) ? (OCT.cost<0 ? "credit balance" : "so far") : "meter",
+     y:(miniToday.cost!=null) ? gcost(miniY.cost) : ""},
   ];
   $("todayTiles").innerHTML = tiles.map(t=>
     `<div class="tile"><div class="k"><span class="swatch" style="background:${t.c}"></span>${t.k}</div>
-     <div class="v">${t.v}${t.u?`<small>${t.u}</small>`:""}</div><div class="note">${t.n}</div></div>`).join("");
+     <div class="v">${t.v}${t.u?`<small>${t.u}</small>`:""}</div><div class="note">${t.n}</div>
+     ${t.y?`<div class="cmp">${t.y}</div>`:""}</div>`).join("");
 }
 
 function connect(){

@@ -90,6 +90,9 @@ class Controller:
         self._lock = threading.Lock()
         self._prev_pv: list[dict] = []      # the month before, for the solar fit
         self._prev_pv_month: str = ""
+        # Yesterday's report does not change once the day is over, so it
+        # is fetched once and then kept until the clock turns over.
+        self._yesterday_cache: dict = {}
 
     # -- helpers ---------------------------------------------------------
 
@@ -220,7 +223,8 @@ class Controller:
                 tz = self.config.get("display.timezone", "auto")
                 if tz in ("", "auto", None):
                     tz = "Europe/London"
-                daily = collect_daily(self.api, key, sn, tz)
+                daily = collect_daily(self.api, key, sn, tz,
+                                      self._yesterday_cache)
                 # The solar forecast is calibrated against the inverter's
                 # own daily yield, and the window has to reach back past
                 # the turn of the month - so the month before is fetched
@@ -474,8 +478,47 @@ def _local_now(timezone_name: str = "Europe/London") -> datetime:
         return datetime.now(timezone.utc)
 
 
+def _yesterday_totals(api, key: str, sn: str, local: datetime,
+                      monthly: list[dict], cache: dict | None = None) -> dict:
+    """Yesterday's totals, from the inverter's own register.
+
+    The monthly register holds a figure for every day of the month, so
+    yesterday's is already in hand - the register that has just been
+    fetched.  Only when yesterday was in the month before does that
+    month's register have to be asked for separately, and then it is kept
+    rather than fetched again every five minutes.
+    """
+    cache = cache if cache is not None else {}
+    yesterday = local - timedelta(days=1)
+    out: dict = {}
+    register = monthly
+    if yesterday.month != local.month:
+        stamp = f"month:{yesterday.year:04d}-{yesterday.month:02d}"
+        if stamp in cache:
+            register = cache[stamp]
+        else:
+            try:
+                register = api.report_query(key, sn, "month", yesterday.year,
+                                            yesterday.month, yesterday.day,
+                                            REPORT_VARIABLES)
+            except Exception:  # noqa: BLE001
+                register = []
+            cache[stamp] = register
+    index = yesterday.day - 1
+    if index >= 0:
+        for variable, name in REPORT_NAMES.items():
+            values = report_values(register, variable)
+            if index < len(values) and isinstance(values[index], (int, float)):
+                out[name] = float(values[index])
+        yields = report_values(register, PV_TOTAL_VARIABLE)
+        if index < len(yields) and isinstance(yields[index], (int, float)):
+            out["pv"] = round(float(yields[index]), 3)
+    return out
+
+
 def collect_daily(api, key: str, sn: str,
-                  timezone_name: str = "Europe/London") -> dict:
+                  timezone_name: str = "Europe/London",
+                  cache: dict | None = None) -> dict:
     """Today's totals from the inverter's own production report.
 
     The report is the inverter's own daily register, so it is right even
@@ -487,6 +530,9 @@ def collect_daily(api, key: str, sn: str,
     hours that have gone by added up should match the day in the
     monthly register.  When they do not, one of them is wrong and it is
     worth knowing which.
+
+    Yesterday's figures come out of the same registers, so that the
+    today panel can say how today is going against it.
     """
     try:
         from zoneinfo import ZoneInfo
@@ -515,6 +561,10 @@ def collect_daily(api, key: str, sn: str,
         # is calibrated against: the inverter's own yield, next to the
         # sun that the weather service says landed on the roof.
         out["pv_daily"] = _pv_daily_series(yields, local.year, local.month, local.day)
+        # Yesterday, for the comparison on the today panel.  The same
+        # register, read a day further back.
+        out["yesterday"] = _yesterday_totals(api, key, sn, local, report,
+                                              cache)
     except Exception as exc:  # noqa: BLE001
         out["error"] = f"{type(exc).__name__}: {exc}"
         return out
@@ -695,6 +745,10 @@ def usage_payload(history: HalfHourHistory,
         "today": today,
         "bands": flux_bands(series),
     }
+    # Yesterday, when the inverter's register has it.  The today panel
+    # compares the two.
+    if daily.get("yesterday"):
+        out["yesterday"] = daily["yesterday"]
 
     # the live feed's own integration of the solar power - a third
     # opinion on the same day, straight from the inverter
@@ -1462,6 +1516,34 @@ def seed_demo_history(history=None) -> None:
         }, when=when)
 
 
+#: How the demo's made-up yesterday differs from today, so that the trend
+#: arrows have something to say: a sunnier day, a quieter house, more of
+#: it used at home and less bought from the grid.
+DEMO_YESTERDAY = {
+    "pv": 1.22,
+    "house": 0.91,
+    "batt_out": 1.35,
+    "grid_in": 0.74,
+    "grid_out": 1.28,
+    "batt_in": 0.85,
+}
+
+
+def demo_yesterday(today: dict) -> dict:
+    """A made-up yesterday, for the demo.
+
+    The demo has no real yesterday to compare with, so one is invented
+    from today's figures.  It is only here so that the comparison can be
+    seen and checked; the real thing comes from the inverter's register.
+    """
+    out = {}
+    for name, factor in DEMO_YESTERDAY.items():
+        value = (today or {}).get(name)
+        if isinstance(value, (int, float)):
+            out[name] = round(float(value) * factor, 3)
+    return out
+
+
 def demo_worker(state: DashboardState, stop: threading.Event,
                 history=None) -> None:
     """Feed synthetic data so the UI can be previewed without credentials.
@@ -1500,14 +1582,21 @@ def demo_worker(state: DashboardState, stop: threading.Event,
             imp = 0.0
         # a synthetic Octopus Mini, so the live panel can be seen in the
         # demo without a real account
+        cost = round(0.83 + imp * 0.4, 2)
         state.set_mini({
             "source": "mini",
             "live": {"demand_w": round(imp * 1000 + 60, 1),
                      "consumption_wh": 41234, "export_wh": 8123},
             "today": {"consumption_kwh": round(6.42 + imp * 3, 3),
                       "export_kwh": round(1.87 + exp * 2, 3),
-                      "cost": round(0.83 + imp * 0.4, 2),
-                      "series": []},
+                      "cost": cost,
+                      "series": [],
+                      "yesterday": {
+                          "cost": round(cost * 1.18, 2),
+                          "consumption_kwh": round(6.42 + imp * 3 + 1.1, 3),
+                          "export_kwh": round(1.87 + exp * 2 - 0.4, 3),
+                          "readings": 48,
+                      }},
         })
         state.set_live({
             "pvPower": round(pv, 3), "loadsPower": round(load, 3),
@@ -1526,7 +1615,11 @@ def demo_worker(state: DashboardState, stop: threading.Event,
                 "feedinPower": exp, "batChargePower": chg,
                 "batDischargePower": dis, "SoC": soc,
             })
-            state.set_usage(usage_payload(history))
+            payload = usage_payload(history)
+            yesterday = demo_yesterday(payload.get("today") or {})
+            if yesterday:
+                payload["yesterday"] = yesterday
+            state.set_usage(payload)
         stop.wait(2.0)
 
 

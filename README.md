@@ -564,6 +564,34 @@ what is left over is the battery's own losses.
 > inverter's registers and the live feed shows up rather than being
 > taken on trust.
 
+### Yesterday, for comparison
+
+Under each figure on the **Today** panel is yesterday's figure for the
+same thing, in a smaller and quieter hand — the word on one line, the
+number and its unit on the next:
+
+```
+SOLAR              HOUSE             BATTERY
+10.15 kWh          4.29 kWh          0.53 kWh
+yesterday          yesterday         yesterday
+12.38 kWh          3.92 kWh          0.72 kWh
+```
+
+The energy figures come out of the inverter's own register — the same
+monthly report that today's figures come from, read one day further
+back — so they do not depend on the dashboard having been running.
+Yesterday's cost comes from the Octopus Mini, which keeps a day or two
+of its own half-hourly readings.
+
+Yesterday is a **whole day** and today is not, so today will usually be
+the smaller of the two numbers until the evening. That is what the
+figures are: it says where the day has got to, against the whole of the
+day before it.
+
+Where there is no yesterday to compare with — the meter has forgotten
+it, or the inverter has not reported it — the line is simply left out
+rather than filled in with something that is not there.
+
 ---
 
 ## Keeping your credentials
@@ -786,7 +814,7 @@ foxess-dashboard/
 python3 -m unittest discover -s tests -v
 ```
 
-371 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
+388 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
 direction, grid import vs export, the device-level timestamp quirk of the v1
 real/query endpoint, the Open API signature, secret masking and file
 permissions — and the parts that are easy to get wrong: watts against
@@ -797,6 +825,8 @@ calibration — the weather codes, the daily irradiation, the day boundary
 and the fitting of the array against the inverter's own yield. The sun's
 own times are checked against the forecast service's sunrise and sunset
 for ten places and days, which is what the daylight band is drawn from.
+Yesterday's figures are checked against the inverter's register, day by
+day, and the meter is not asked for a part of a day.
 
 The font and the ESP32 renderer are verified visually — `test_font.py` prints
 every glyph as ASCII art, and `test_esp32_render.py` renders the ESP32 screen
