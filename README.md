@@ -9,6 +9,7 @@ A standalone web dashboard for a FoxESS (Foxconn) solar installation.
 - **Export and import** the settings, so credentials are never retyped
 - **Fits one screen** from 1440×900 down to 320×240, with no scrolling
 - **Runs on a Raspberry Pi**, or drives an **ESP32 LCD** as a thin terminal
+- **Runs in Docker** — one container, the settings mounted in from the host, `./update.sh` to update it
 - **Zero dependencies** — Python standard library only, no `pip install`
 
 ## Screenshots
@@ -62,6 +63,18 @@ Open API, so you don't need to set them.
 > **Prerequisite:** enable **Multi-device login** in the FoxESS web portal —
 > Profile → System Settings → Advanced Settings. The WebSocket authenticates
 > with a web-session token, not the Open API key.
+
+### 3. Run it in Docker
+
+```bash
+mkdir -p config && cp config.example.json config/config.json
+docker compose up -d --build
+```
+
+The settings file stays on the host and is mounted into the container, so
+rebuilding never loses the credentials. The full guide — updating, rolling
+back, and the Pi screens that read it over HTTP — is in
+[`docs/DOCKER.md`](docs/DOCKER.md).
 
 ---
 
@@ -708,6 +721,63 @@ and Pi-specific Chromium flags.
 
 ---
 
+## Running in Docker
+
+The dashboard is standard library only, so the container is the official
+Python image plus the timezone database — there is nothing to install and
+nothing to compile.
+
+```
+  Pi screen(s) ──HTTP──►  the container  ──HTTPS──►  FoxESS / Octopus
+                         │  reads
+                         ▼
+                   ./config/config.json
+```
+
+**The settings file is never in the image.** It lives in `./config` on the
+host and is mounted in, so a rebuild cannot lose it and a built image cannot
+leak it.
+
+```bash
+mkdir -p config && cp config.example.json config/config.json
+chmod 600 config/config.json
+
+docker compose up -d --build
+```
+
+The container runs as uid 1000 — the first ordinary user on Raspberry Pi OS —
+and answers `/healthz`, so Docker knows when it is up.
+
+### Updating
+
+```bash
+./update.sh
+```
+
+Pull the newest code, build it, tag the image that is running now as
+`:previous`, put the new one in place, and wait for it to answer. If it does
+not come up, the old image goes back and the log says why. A failed build
+never touches the container that is running.
+
+### The screens
+
+The Pi screens are clients: a browser and an address.
+
+```bash
+python3 display/pi_kiosk.py --url http://<host-ip>:8765 --no-server
+```
+
+### The catch
+
+**The dashboard has no authentication.** Anything that can reach the port can
+read the page, change the settings and ask for the credentials in plain
+text. Keep it on the LAN — do not publish the port. The settings file has
+the FoxESS password and the API keys in it; keep it `0600` and out of git.
+
+The whole guide is in [`docs/DOCKER.md`](docs/DOCKER.md).
+
+---
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -825,8 +895,12 @@ foxess-dashboard/
 │   ├── test_esp32_render.py # renders the ESP32 screen offline
 │   ├── test_slides_octopus.py # slides, Octopus, history, daily figures
 │   ├── test_octopus_mini.py   # the Mini: GraphQL, counters, live figures
+│   ├── test_docker.py        # the container: image, compose, update script
 │   └── test_settings_page.py  # the settings page and its fields
-├── docs/                   # screenshots
+├── docs/                   # screenshots, release notes, the Docker guide
+├── Dockerfile              # the container image
+├── docker-compose.yml      # the container, and the settings mounted in
+├── update.sh               # pull, build, swap, and roll back if it breaks
 ├── layout_check.py         # asserts the UI fits every screen size
 └── README.md
 ```
@@ -839,7 +913,7 @@ foxess-dashboard/
 python3 -m unittest discover -s tests -v
 ```
 
-412 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
+445 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
 direction, grid import vs export, the device-level timestamp quirk of the v1
 real/query endpoint, the Open API signature, secret masking and file
 permissions — and the parts that are easy to get wrong: watts against
@@ -854,7 +928,11 @@ Yesterday's figures are checked against the inverter's register, day by
 day, and the meter is not asked for a part of a day.  The swipe that turns
 the deck is checked in a real browser, in both directions, and so is the
 gesture that is *not* one - a short drag, a vertical one, and one that
-starts on the gear.
+starts on the gear. The container is checked for the things that would
+only show up on the Pi: that the timezone database is in the image, that
+the container does not run as root, that the settings file is mounted in
+and never baked in, and that an update which breaks the container puts the
+old one back.
 
 The font and the ESP32 renderer are verified visually — `test_font.py` prints
 every glyph as ASCII art, and `test_esp32_render.py` renders the ESP32 screen

@@ -1,0 +1,61 @@
+# The FoxESS dashboard, in a container.
+#
+#   docker compose up -d --build     # start it
+#   ./update.sh                      # get the newest code and restart
+#
+# The settings file is NOT part of the image. It lives in ./config on the
+# host and is mounted into the container, so:
+#
+#   - a rebuild never loses the credentials,
+#   - the image never carries the password or the API keys,
+#   - and the same settings file can be moved to another machine as it is.
+#
+# The whole ./config directory is mounted, not just the file, because the
+# dashboard writes its half-hourly history next to the settings file and
+# replaces the settings file atomically - both of which need a real
+# directory, not a single mounted file.
+
+services:
+  foxess-dashboard:
+    image: foxess-dashboard:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: foxess-dashboard
+    restart: unless-stopped
+
+    # The port on the host that the Pi screens will use. Change it here, or
+    # set FOXESS_PORT in .env.
+    ports:
+      - "${FOXESS_PORT:-8765}:8765"
+
+    volumes:
+      # The settings file and its history. This directory is in .gitignore.
+      # It can be moved elsewhere with FOXESS_CONFIG_DIR in .env.
+      - ${FOXESS_CONFIG_DIR:-./config}:/config
+
+    environment:
+      # Where the settings file is, inside the container.
+      FOXESS_DASHBOARD_CONFIG: /config/config.json
+      # Listen on every interface inside the container, so the port mapping
+      # above can reach it.
+      FOXESS_HOST: 0.0.0.0
+      # The port inside the container. The host side is the mapping above.
+      FOXESS_PORT: "8765"
+      # The container's timezone. The dashboard's own timezone is the
+      # display.timezone setting; this is what the OS is told.
+      TZ: "${TZ:-Europe/London}"
+
+    # Run as the same person who owns the settings file, so the dashboard
+    # can read it and write it back. 1000 is the first ordinary user on
+    # Raspberry Pi OS; if yours is different, put FOXESS_UID and FOXESS_GID
+    # in .env.
+    user: "${FOXESS_UID:-1000}:${FOXESS_GID:-1000}"
+
+    # The dashboard is chatty for a few seconds at start, then quiet. Cap
+    # the log so it cannot quietly fill the disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

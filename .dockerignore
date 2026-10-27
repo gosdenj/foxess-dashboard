@@ -1,0 +1,36 @@
+# The build context should be the code, not the whole working tree.
+#
+# Most important: the settings file holds the FoxESS password, the Open API
+# key and the Octopus API key. It is mounted into the container at run time
+# and must never be copied into an image, where it would sit in a layer
+# forever.
+config.json
+config/
+config-history.json
+*-history.json
+.env
+
+# Version control and Python bits.
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# The tests and the checks they drive are not part of the server.
+tests/
+display/
+docs/
+*.md
+flow_direction_check.py
+layout_check.py
+
+# The preview images are large and are only used by the README.
+preview-*.png
+
+# Editor and OS noise.
+.DS_Store
+.idea/
+.vscode/
+*.swp
