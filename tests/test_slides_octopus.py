@@ -150,13 +150,29 @@ class TestSlideTransition(unittest.TestCase):
         self.assertIn('$("clockDm").textContent', self.index)
         self.assertIn('$("clockYr").textContent', self.index)
 
-    def test_a_small_screen_drops_the_weekday_before_the_plant_name(self):
-        """The header is one line, so something has to give.  The weekday
-        goes first, and the plant details go before the plant name."""
-        self.assertIn("@media(max-width:1000px),(max-height:560px){\n  #clockWd{display:none}",
-                      self.index)
+    def test_the_weekday_is_always_shown(self):
+        """The header has the room now that the datalogger's model is
+        gone, so the day of the week is on every screen."""
+        self.assertNotIn("#clockWd{display:none}", self.index)
+
+    def test_the_header_keeps_the_station_identifier(self):
+        """The datalogger's model ("WLan-WW (WiFi & LAN)") is in the
+        system panel.  The header carries the serial, which is what
+        identifies the station."""
+        self.assertIn('$("plantMeta").textContent = M.inverter_sn || "";', self.index)
+        self.assertNotIn("M.datalogger].filter(Boolean)", self.index)
+
+    def test_a_small_screen_drops_the_plant_details_before_the_name(self):
+        """The header is one line, so something has to give.  The plant
+        details go before the plant name."""
         self.assertIn("@media(max-width:640px),(max-height:400px){\n  h1 .sub{display:none}",
                       self.index)
+
+    def test_the_cog_is_big_enough_to_hit(self):
+        """It has to be easy to hit on a touch screen, so the picture is
+        a little bigger and the target is bigger than the picture."""
+        self.assertIn("font-size:calc(var(--fsl) * 1.25)", self.index)
+        self.assertIn('.gear::after{content:"";position:absolute;inset:-.55em -.4em', self.index)
 
 
 class TestSlideState(unittest.TestCase):

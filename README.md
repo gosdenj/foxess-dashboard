@@ -229,12 +229,21 @@ part of the dashboard that stays put while everything below it changes.
 The clock shows the time and the date together:
 
 ```
-Your plant  1B2C3D4E5F60 · WLAN-WW (WiFi & LAN)   [LIVE] [0.2s] [Tue 27 Oct 2026 · 09:44] [⚙]
+Your plant  1B2C3D4E5F60   [LIVE] [0.2s] [Tue 27 Oct 2026 · 09:44] [⚙]
 ```
 
-The header is one line, so on a small screen something has to give. The
-weekday goes first, and on the smallest screens the plant details go before
-the plant name — the name is what matters.
+The header carries the station identifier — the plant's name and the
+inverter's serial. The datalogger's model (`WLan-WW (WiFi & LAN)`) is
+not much use up there; it is in the system panel, where there is room
+for it.
+
+The header is one line, so on the smallest screens the plant details
+go before the plant name — the name is what matters.
+
+The **cog** at the end is the way to the settings page. It is small on
+purpose, but it has to be easy to hit on a touch screen, so the
+picture is a little bigger than it was and the target is bigger than
+the picture.
 
 ## Weather and the solar forecast
 
@@ -685,6 +694,21 @@ logged unless `FOXESS_DEBUG=1` is set. Genuine bugs still print a traceback.
 | `/api/weather/test` | POST = try the weather settings and say what came back |
 | `/events` | Server-Sent Events stream of live updates |
 | `/healthz` | Liveness probe |
+
+**There is no authentication, on purpose.** The dashboard is an appliance
+on a private network — a Raspberry Pi on the home LAN — and everything
+it holds is already in `config.json` on that Pi, readable by anyone who
+can reach the Pi anyway. Putting a password on the routes would mean a
+password on the kiosk, on the phone that opens the same page, and on the
+ESP32, for no gain. The one thing to be careful of is the network: the
+server binds `0.0.0.0` by default, so it is reachable by anything on
+the LAN, and `config.json` holds the FoxESS password, the Open API key
+and the Octopus key in plain text.
+
+Set `server.host` to `127.0.0.1` in `config.json` if the dashboard
+should only be reachable from the Pi itself — a reverse proxy in front
+of it, or a tunnel from outside the house, is then the way to reach it
+from elsewhere.
 
 ---
 

@@ -53,8 +53,13 @@ h1 .sub{color:var(--dim);font-weight:400;font-size:var(--fsl);margin-left:.5em}
 .dot{width:.6em;height:.6em;border-radius:50%;background:var(--dim);flex:none}
 .dot.on{background:var(--bat);box-shadow:0 0 0 .25em rgba(52,211,153,.16)}
 .dot.off{background:var(--alarm);box-shadow:0 0 0 .25em rgba(248,113,113,.16)}
+/* The cog is small on purpose - there is not much room for it - but it
+   has to be easy to hit on a touch screen, so the picture is a little
+   bigger and the target is bigger still than the picture. */
 .gear{background:var(--panel2);border:1px solid var(--line);border-radius:999px;color:var(--muted);
-      padding:.3em .65em;font-size:var(--fsl);text-decoration:none;white-space:nowrap}
+      padding:.2em .5em;font-size:calc(var(--fsl) * 1.25);line-height:1;
+      text-decoration:none;white-space:nowrap;position:relative}
+.gear::after{content:"";position:absolute;inset:-.55em -.4em;border-radius:999px}
 .gear:hover{color:var(--text);border-color:var(--muted)}
 
 /* The clock carries the date as well as the time.  The top of the
@@ -63,15 +68,8 @@ h1 .sub{color:var(--dim);font-weight:400;font-size:var(--fsl);margin-left:.5em}
 #clockPill{gap:0}
 #clockDate::after{content:" · ";opacity:.55}
 #clockWd::after,#clockDm::after{content:" "}
-/* A small screen has not got room for the weekday as well, and the
-   plant details are the first thing to go when the header runs out
-   of space - the name is what matters. */
-@media(max-width:1000px),(max-height:560px){
-  #clockWd{display:none}
-  /* The plant details are the least important thing in the header, so
-     they are the first to give up a little room. */
-  h1 .sub{font-size:calc(var(--fsl) * .92)}
-}
+/* A small screen has not got room for the plant details, and the name
+   is what matters. */
 @media(max-width:640px),(max-height:400px){
   h1 .sub{display:none}
 }
@@ -950,7 +948,10 @@ function render(s){
   if (s.settings && s.settings.display){ CFG = s.settings; applyDisplay(); }
 
   $("plantName").textContent = M.plant_name || "FoxESS";
-  $("plantMeta").textContent = [M.inverter_sn, M.datalogger].filter(Boolean).join("  ·  ");
+  // The header carries the station identifier.  The datalogger's model
+  // ("WLan-WW (WiFi & LAN)") is not much use up here - it is in the
+  // system panel - and the space is better spent on the date.
+  $("plantMeta").textContent = M.inverter_sn || "";
   if(s.build && !$("gear").dataset.build){
     $("gear").dataset.build = s.build;
     $("gear").title = "Settings \u00b7 build " + s.build;
