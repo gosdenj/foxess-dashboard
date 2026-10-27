@@ -241,6 +241,18 @@ class TestThePublishWorkflow(unittest.TestCase):
         self.assertLess(self.text.index("build and push"),
                         self.text.index("tell Portainer"))
 
+    def test_it_checks_there_is_something_to_do(self):
+        """Otherwise every scheduled run builds the same image again."""
+        self.assertIn("is there anything to do?", self.text)
+        self.assertIn("todo=true", self.text)
+        self.assertIn("manifests/sha-${GITHUB_SHA}", self.text)
+
+    def test_it_has_a_safety_net(self):
+        """A push made with an OAuth token does not start a workflow, and an
+        update that is never built is an update that never arrives."""
+        self.assertIn("schedule:", self.text)
+        self.assertIn("cron:", self.text)
+
     def test_it_builds_for_every_architecture(self):
         """A hosted Intel server, an Apple Silicon Mac, a Pi 4 or 5, a Pi 3."""
         for platform in ("linux/amd64", "linux/arm64", "linux/arm/v7"):

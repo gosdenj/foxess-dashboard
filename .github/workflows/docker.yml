@@ -16,6 +16,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # A safety net.
+  #
+  # A push made with some kinds of token - an OAuth token, for one - does
+  # not start a workflow, and a dashboard waiting for an image that is
+  # never built is a dashboard that does not get its updates.  This runs
+  # every four hours, checks whether the image for the newest commit is
+  # already published, and does nothing at all if it is.
+  schedule:
+    - cron: '17 */4 * * *'
 
 # The workflow's own token can write to the registry, and can make the one
 # small commit at the end that tells Portainer the image is ready.
@@ -59,7 +68,34 @@ jobs:
             type=raw,value=latest
             type=sha,format=long
 
+      # Is there anything to do?
+      #
+      # The image is tagged with the commit it was built from, so the
+      # registry can be asked whether this commit has already been built.
+      # A commit that is only a signal - the empty one made at the end -
+      # carries no code of its own, and the image for it is the image for
+      # the commit before it, which is already published.
+      - name: is there anything to do?
+        id: check
+        run: |
+          set -euo pipefail
+          if git log -1 --format=%B | grep -q "\[skip ci\]"; then
+            echo "the last commit is only a signal - there is nothing to do"
+            echo "todo=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TOKEN=$(curl -sf "https://${REGISTRY}/token?scope=repository:${IMAGE_NAME}:pull" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+          if curl -sf -o /dev/null -H "Authorization: Bearer ${TOKEN}" \
+              "https://${REGISTRY}/v2/${IMAGE_NAME}/manifests/sha-${GITHUB_SHA}"; then
+            echo "the image for this commit is already published"
+            echo "todo=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "todo=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: build and push
+        if: steps.check.outputs.todo == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -83,6 +119,7 @@ jobs:
       # it is made after the push rather than before it.  '[skip ci]' keeps
       # it from starting the whole workflow all over again.
       - name: tell Portainer the image is ready
+        if: steps.check.outputs.todo == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
