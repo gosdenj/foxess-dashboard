@@ -103,6 +103,92 @@ FOXESS_GID=$(id -g)
 
 ---
 
+## On a hosted server
+
+The same three commands work on a hosted Intel (x86_64) box — a VPS, a
+droplet, an EC2 instance — as long as Docker is installed. The image is built
+for the machine it is built on, so nothing special is needed, and the base
+image publishes `linux/amd64`, `linux/arm64` and `linux/arm/v7`: the same
+Dockerfile serves a VPS, a Pi and a Mac.
+
+```bash
+git clone <your-repo> foxess-dashboard
+cd foxess-dashboard
+mkdir -p config && cp config.example.json config/config.json
+docker compose up -d --build
+```
+
+### Open the port in two places
+
+A hosted instance has a firewall in front of it: the provider's (DigitalOcean
+firewall, AWS security group, and so on) **and** the one on the box
+(`ufw`, `firewalld`). Both need to allow the port.
+
+```bash
+sudo ufw allow 8765/tcp
+```
+
+### The one that matters
+
+**A hosted instance has a public IP, and the dashboard has no
+authentication.** Anything that can reach the port can read the page, change
+the settings, and ask the server for the password and the API keys in plain
+text (`/api/settings/export` returns them).
+
+So do not open the port to the world. Three ways to be safe:
+
+1. **Publish nothing; reach it over SSH.** The dashboard stays on the box:
+
+   ```bash
+   ssh -L 8765:127.0.0.1:8765 you@your-server
+   ```
+
+   It is then at `http://127.0.0.1:8765/` on your own machine, and the Pi
+   screens reach it over the same tunnel, a VPN or a private network.
+
+2. **Put a password in front of it.** nginx or Caddy in front of the
+   container, with TLS and a password, forwarding to 8765.
+
+3. **Keep it on a private network.** A hosted instance on Tailscale, WireGuard
+   or a VPC has no public route to it at all.
+
+The container does not know the difference between these; it serves the same
+page either way.
+
+### If you are root on the box
+
+The container runs as uid 1000, and the settings directory you just created
+belongs to root. `./update.sh` stops before it replaces anything and tells
+you:
+
+```
+sudo chown -R 1000:1000 config
+```
+
+or set `FOXESS_UID` and `FOXESS_GID` in `.env` to match a user you have.
+
+### Building on one machine for another
+
+The image is built for the machine it is built on. If you build on an Apple
+Silicon Mac and want it to run on an Intel server, ask for that platform and
+send it over — the image is about 120 MB:
+
+```bash
+DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose build
+docker save foxess-dashboard:latest | ssh you@your-server docker load
+```
+
+Then, on the server:
+
+```bash
+docker compose up -d --no-build
+```
+
+Building on the server itself is simpler, and needs neither — the image is
+built for the machine it is running on.
+
+---
+
 ## Updating
 
 ```bash

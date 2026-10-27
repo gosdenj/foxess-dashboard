@@ -746,7 +746,9 @@ docker compose up -d --build
 ```
 
 The container runs as uid 1000 — the first ordinary user on Raspberry Pi OS —
-and answers `/healthz`, so Docker knows when it is up.
+and answers `/healthz`, so Docker knows when it is up. The same image serves
+a hosted Intel server, a Pi and a laptop: it builds for `amd64`, `arm64` and
+`arm/v7`, and nothing in the dashboard is architecture-dependent.
 
 ### Updating
 
