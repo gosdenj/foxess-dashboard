@@ -932,7 +932,7 @@ foxess-dashboard/
 python3 -m unittest discover -s tests -v
 ```
 
-461 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
+462 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
 direction, grid import vs export, the device-level timestamp quirk of the v1
 real/query endpoint, the Open API signature, secret masking and file
 permissions — and the parts that are easy to get wrong: watts against

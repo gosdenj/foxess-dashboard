@@ -229,7 +229,17 @@ class TestThePublishWorkflow(unittest.TestCase):
         self.assertRegex(self.text, r"(?m)^\s*packages:\s*write\s*$")
 
     def test_it_cannot_do_anything_else(self):
-        self.assertRegex(self.text, r"(?m)^\s*contents:\s*read\s*$")
+        """Only the registry to write to, and the one commit at the end."""
+        self.assertRegex(self.text, r"(?m)^\s*contents:\s*write\s*$")
+
+    def test_it_tells_portainer_the_image_is_ready(self):
+        """Portainer redeploys when the repository changes, and re-pulls the
+        image as it does - so it must be told *after* the image is there.
+        An empty commit with '[skip ci]' is that signal."""
+        self.assertIn("git commit --allow-empty", self.text)
+        self.assertIn("[skip ci]", self.text)
+        self.assertLess(self.text.index("build and push"),
+                        self.text.index("tell Portainer"))
 
     def test_it_builds_for_every_architecture(self):
         """A hosted Intel server, an Apple Silicon Mac, a Pi 4 or 5, a Pi 3."""

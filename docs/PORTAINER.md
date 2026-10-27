@@ -49,6 +49,40 @@ The workflow is [`.github/workflows/docker.yml`](../.github/workflows/docker.yml
 and it is already part of the repository. It signs in with the workflow's
 own token, so there is no secret to set up.
 
+### The order matters
+
+Portainer notices that the *repository* has changed, and redeploys the
+stack — re-pulling the image as it does. If it did that while the image
+was still being built, it would find the old image, deploy it, and then
+have no reason to look again until the next commit. The new code would
+sit there unpublished until someone happened to commit again.
+
+So the workflow makes one small commit **after** the image has been
+pushed:
+
+```
+   push to main
+        │
+        ▼
+   the workflow builds the image and pushes it to the registry
+        │
+        ▼
+   the workflow commits "publish <sha> [skip ci]"    ← this is the signal
+        │
+        ▼
+   Portainer polls, sees the change, re-pulls the image, restarts
+        │
+        ▼
+   the new version is running
+```
+
+`[skip ci]` is there so that commit does not start the workflow all over
+again. It is an empty commit — nothing in it but the message.
+
+If Portainer happens to poll in the window between the push and the
+image being ready, it redeploys the old image and then redeploys again
+when the signal commit arrives, so the pipeline heals itself either way.
+
 ## Before you start
 
 The repository is private, so Portainer needs a credential to clone it,

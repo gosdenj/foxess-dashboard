@@ -17,10 +17,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# The workflow's own token can write to the registry; it cannot touch
-# anything else in the repository.
+# The workflow's own token can write to the registry, and can make the one
+# small commit at the end that tells Portainer the image is ready.
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 env:
@@ -71,3 +71,20 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Now the image is in the registry, and Portainer can be told.
+      #
+      # Portainer notices that the repository has changed and redeploys the
+      # stack, re-pulling the image as it does.  It would rather do that
+      # *after* the image is published, because a redeploy that finds the
+      # old image leaves the old code running until the next commit.
+      #
+      # So this empty commit says "the image for this commit is ready", and
+      # it is made after the push rather than before it.  '[skip ci]' keeps
+      # it from starting the whole workflow all over again.
+      - name: tell Portainer the image is ready
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "publish ${GITHUB_SHA:0:7} [skip ci]"
+          git push
