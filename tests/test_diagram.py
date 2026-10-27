@@ -313,11 +313,12 @@ class TestRingWireBend(unittest.TestCase):
         Every wire runs between two nodes - a satellite on one side and the
         hub on the other - so each of its two ends is checked against the
         ring it belongs to.
+
+        The rings are read out of the markup rather than written out here,
+        so that the hub can be made bigger without this test going stale -
+        it would still catch a wire that no longer reaches the ring.
         """
-        # node id -> (centre x, centre y, radius)
-        rings = {"PV": (135, 58, 50), "LOAD": (765, 58, 50),
-                 "GRID": (135, 182, 50), "BATT": (765, 182, 50),
-                 "HUB": (450, 124, 60)}
+        rings = self._rings()
         # wire id -> the node at each end, in the order the path is drawn
         ends = {"rLinePv": ("PV", "HUB"), "rLineLoad": ("HUB", "LOAD"),
                 "rLineGrid": ("GRID", "HUB"), "rLineBat": ("HUB", "BATT")}
@@ -328,6 +329,35 @@ class TestRingWireBend(unittest.TestCase):
                 distance = math.hypot(point[0] - cx, point[1] - cy)
                 self.assertAlmostEqual(distance, radius, delta=0.5,
                                        msg=f"{wire} endpoint left the {node} ring")
+
+    def _rings(self) -> dict:
+        """Every ring in the diagram: centre and radius, from the markup."""
+        names = {"rRingPv": "PV", "rRingLoad": "LOAD", "rRingGrid": "GRID",
+                 "rRingBat": "BATT", "rRingHub": "HUB"}
+        rings = self.index[self.index.index('id="ringsSvg"'):]
+        out = {}
+        for match in re.finditer(
+                r'<circle[^>]*?\sid="(rRing\w+)"[^>]*?\scx="([\d.]+)"'
+                r'\s+cy="([\d.]+)"[^>]*?\sr="([\d.]+)"', rings):
+            name = names.get(match.group(1))
+            if name:
+                out[name] = (float(match.group(2)), float(match.group(3)),
+                             float(match.group(4)))
+        return out
+
+    def test_the_hub_is_a_bigger_ring_than_the_satellites(self):
+        """The inverter is the middle of the diagram, so it says so."""
+        rings = self._rings()
+        self.assertGreater(rings["HUB"][2], rings["PV"][2])
+        for node in ("PV", "LOAD", "GRID", "BATT"):
+            self.assertEqual(rings[node][2], rings["PV"][2],
+                             f"{node} is a different size from the others")
+
+    def test_the_hubs_level_is_the_biggest_number_on_the_diagram(self):
+        """The state of charge is the point of the hub."""
+        self.assertIn(".ringsvg .rval.rhub{font-size:31px}", self.index)
+        self.assertIn('setAttr($("rHubVal"), "class", "rval rhub "+healthClass)',
+                      self.index)
 
     def test_the_diagram_stays_mirror_symmetric(self):
         """Solar mirrors house, and grid mirrors battery, about x=450."""

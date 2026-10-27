@@ -126,6 +126,10 @@ right now. The flow lines are dotted and carry moving dashes in the direction
 the power is actually going, and a line only appears when there is power on
 it — so an idle system stays calm instead of flickering.
 
+The hub's ring is a little bigger than the four around it, and the level in
+the middle is the biggest number on the diagram — the inverter is the centre
+of it, and that is where the eye should land first.
+
 **The battery level is a ring.** The hub and the battery node both show the
 state of charge as an arc that fills clockwise from the top, and the colour
 tells you how healthy the pack is:
@@ -146,7 +150,7 @@ is busy showing the battery.
 | Style | 800×480 |
 |---|---|
 | Flow | values at 26 px, one row of nodes |
-| Rings | values at 21 px, a hub and four rings |
+| Rings | values at 21 px, a hub and four rings — the hub's level at 27 px |
 
 Both styles are checked at every viewport size by `layout_check.py`, so
 neither can quietly break the other.
@@ -814,7 +818,7 @@ foxess-dashboard/
 python3 -m unittest discover -s tests -v
 ```
 
-388 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
+392 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
 direction, grid import vs export, the device-level timestamp quirk of the v1
 real/query endpoint, the Open API signature, secret masking and file
 permissions — and the parts that are easy to get wrong: watts against

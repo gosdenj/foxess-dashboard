@@ -342,6 +342,9 @@ body[data-diagram="rings"] .socbar{margin-bottom:.15em}
 .ringsvg .rarc{fill:none;stroke-width:6;stroke-linecap:round;
                transition:stroke-dasharray .4s ease, stroke .4s ease}
 .ringsvg .rval{font-family:var(--font-mono);font-size:25px;fill:var(--text)}
+/* the hub's level is the point of the diagram, so its number is bigger
+   than the satellites' */
+.ringsvg .rval.rhub{font-size:31px}
 .ringsvg .rname{font-family:var(--font-mono);font-size:13px;fill:var(--muted);
                 letter-spacing:.06em}
 .ringsvg .rstatus{font-family:var(--font-ui);font-size:13px;fill:var(--dim)}
@@ -808,22 +811,24 @@ body .dash[data-slide="weather"]{
           <text class="fname" x="570" y="260" text-anchor="middle">BATTERY</text>
         </svg>
         <svg class="flowsvg ringsvg" id="ringsSvg" viewBox="0 0 900 258" preserveAspectRatio="xMidYMid meet">
-          <path id="rLinePv"   class="rwire moving" d="M183.9 68.3 Q290.0 78.3 391.3 111.7"  stroke="var(--pv)"/>
-          <path id="rLineLoad" class="rwire moving" d="M508.7 111.7 Q610.0 78.3 716.1 68.3"  stroke="var(--load)"/>
-          <path id="rLineGrid" class="rwire moving" d="M184.2 172.9 Q289.8 165.7 391.0 134.9" stroke="var(--grid)"/>
-          <path id="rLineBat"  class="rwire moving" d="M509.0 134.9 Q610.2 165.7 715.8 172.9" stroke="var(--bat)"/>
+          <!-- The wires end on the hub's edge, so they are measured out to
+               its radius: 68 for the hub, 50 for the satellites. -->
+          <path id="rLinePv"   class="rwire moving" d="M183.93 68.31 Q290.0 78.3 383.45 110.05"  stroke="var(--pv)"/>
+          <path id="rLineLoad" class="rwire moving" d="M516.55 110.05 Q610.0 78.3 716.07 68.31"  stroke="var(--load)"/>
+          <path id="rLineGrid" class="rwire moving" d="M184.17 172.91 Q289.8 165.7 383.13 136.35" stroke="var(--grid)"/>
+          <path id="rLineBat"  class="rwire moving" d="M516.87 136.35 Q610.2 165.7 715.83 172.91" stroke="var(--bat)"/>
 
           <circle class="rnode" id="rRingPv"   cx="135" cy="58"  r="50" stroke="var(--pv)"/>
           <circle class="rnode" id="rRingLoad" cx="765" cy="58"  r="50" stroke="var(--load)"/>
           <circle class="rnode" id="rRingGrid" cx="135" cy="182" r="50" stroke="var(--grid)"/>
           <circle class="rnode" cx="765" cy="182" r="50" stroke="none"/>
-          <circle class="rnode" cx="450" cy="124" r="60" stroke="none"/>
+          <circle class="rnode" cx="450" cy="124" r="68" stroke="none"/>
           <circle class="rtrack" id="rTrackBat" cx="765" cy="182" r="50"/>
-          <circle class="rtrack" id="rTrackHub" cx="450" cy="124" r="60"/>
+          <circle class="rtrack" id="rTrackHub" cx="450" cy="124" r="68"/>
           <circle class="rarc" id="rRingBat"  cx="765" cy="182" r="50" pathLength="100"
                   stroke="var(--bat)" stroke-dasharray="0 100"
                   transform="rotate(-90 765 182)"/>
-          <circle class="rarc" id="rRingHub"  cx="450" cy="124" r="60" pathLength="100"
+          <circle class="rarc" id="rRingHub"  cx="450" cy="124" r="68" pathLength="100"
                   stroke="var(--bat)" stroke-dasharray="0 100"
                   transform="rotate(-90 450 124)"/>
 
@@ -845,8 +850,8 @@ body .dash[data-slide="weather"]{
             <rect id="rBatFill" x="-10.8" y="-6.3" width="0" height="12.6" rx="1"
                   fill="var(--bat)" stroke="none"/>
           </g>
-          <g id="rIcoHub" class="ricon" transform="translate(450,94)">
-            <circle cx="0" cy="0" r="13" fill="none"/>
+          <g id="rIcoHub" class="ricon" transform="translate(450,92)">
+            <circle cx="0" cy="0" r="14.5" fill="none"/>
             <path d="M-9 0 Q-4.5 -10 0 0 T9 0" fill="none"/>
           </g>
 
@@ -866,10 +871,12 @@ body .dash[data-slide="weather"]{
           <text class="rstatus" x="765" y="216" text-anchor="middle" id="rBatSt">Idle</text>
           <text class="rname"   x="765" y="249" text-anchor="middle">BATTERY</text>
 
-          <text class="rval"   x="450" y="140" text-anchor="middle" id="rHubVal">0%</text>
-          <text class="rstatus" x="450" y="160" text-anchor="middle" id="rHubSt">idle</text>
-          <text class="rhub"   x="450" y="201" text-anchor="middle">INVERTER</text>
-          <text class="rstatus" x="450" y="217" text-anchor="middle" id="rHubModel">-</text>
+          <!-- the hub's level is the point of the diagram, so its number is
+               the largest on it, and its labels sit below the bigger ring -->
+          <text class="rval rhub" x="450" y="140" text-anchor="middle" id="rHubVal">0%</text>
+          <text class="rstatus" x="450" y="161" text-anchor="middle" id="rHubSt">idle</text>
+          <text class="rhub"   x="450" y="210" text-anchor="middle">INVERTER</text>
+          <text class="rstatus" x="450" y="226" text-anchor="middle" id="rHubModel">-</text>
         </svg>
       </div>
       <div class="flowhint" id="flowHint"></div>
@@ -1168,7 +1175,7 @@ function renderRings(s){
   setText($("rHubModel"), M.manager_version ? "fw "+M.manager_version : "-");
   setAttr($("rRingHub"), "stroke", health);
   setAttr($("rRingHub"), "stroke-dasharray", Math.round(lvl)+" 100");
-  setAttr($("rHubVal"), "class", "rval "+healthClass);
+  setAttr($("rHubVal"), "class", "rval rhub "+healthClass);
   setAttr($("rIcoHub"), "stroke", health);
 
   // -- solar --
