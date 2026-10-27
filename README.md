@@ -778,6 +778,21 @@ the FoxESS password and the API keys in it; keep it `0600` and out of git.
 
 The whole guide is in [`docs/DOCKER.md`](docs/DOCKER.md).
 
+### With Portainer
+
+Portainer deploys it as a stack from the repository, and keeps it up to
+date: a push to `main` builds the image, Portainer notices, re-pulls it and
+restarts the container. The settings live in a Docker volume, so a
+redeploy cannot lose them.
+
+The catch with Portainer is that it redeploys a stack **without rebuilding
+it**, so the image has to come from a registry rather than from the
+repository — which is what the GitHub workflow in
+[`.github/workflows/docker.yml`](.github/workflows/docker.yml) is for.
+
+[`docs/PORTAINER.md`](docs/PORTAINER.md) has the whole thing: the fields to
+fill in, the credentials it needs, and how to get the settings back out.
+
 ---
 
 ## Configuration
@@ -902,6 +917,8 @@ foxess-dashboard/
 ├── docs/                   # screenshots, release notes, the Docker guide
 ├── Dockerfile              # the container image
 ├── docker-compose.yml      # the container, and the settings mounted in
+├── docker-compose.portainer.yml  # the same, as a Portainer stack
+├── .github/workflows/docker.yml  # builds the image and publishes it
 ├── update.sh               # pull, build, swap, and roll back if it breaks
 ├── layout_check.py         # asserts the UI fits every screen size
 └── README.md
@@ -915,7 +932,7 @@ foxess-dashboard/
 python3 -m unittest discover -s tests -v
 ```
 
-445 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
+461 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
 direction, grid import vs export, the device-level timestamp quirk of the v1
 real/query endpoint, the Open API signature, secret masking and file
 permissions — and the parts that are easy to get wrong: watts against

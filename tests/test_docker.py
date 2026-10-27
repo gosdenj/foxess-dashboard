@@ -25,6 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCKERFILE = ROOT / "Dockerfile"
 DOCKERIGNORE = ROOT / ".dockerignore"
 COMPOSE = ROOT / "docker-compose.yml"
+PORTAINER_COMPOSE = ROOT / "docker-compose.portainer.yml"
+WORKFLOW = ROOT / ".github" / "workflows" / "docker.yml"
 UPDATE = ROOT / "update.sh"
 GITIGNORE = ROOT / ".gitignore"
 
@@ -141,6 +143,102 @@ class TestTheComposeFile(unittest.TestCase):
     def test_the_log_cannot_fill_the_disk(self):
         self.assertIn("max-size", self.text)
         self.assertIn("max-file", self.text)
+
+
+class TestThePortainerComposeFile(unittest.TestCase):
+    """docker-compose.portainer.yml.
+
+    Portainer redeploys a stack with `docker-compose up -d`, and there is
+    no `--build` in it.  So the image has to come from the registry, and
+    the settings have to live in a volume that a redeploy does not touch.
+    """
+
+    def setUp(self) -> None:
+        self.text = read(PORTAINER_COMPOSE)
+
+    def test_the_image_comes_from_the_registry(self):
+        """A stack redeploy does not build, so it must be able to pull."""
+        self.assertIn("ghcr.io/", self.text)
+        self.assertRegex(self.text, r"(?m)^\s*image:\s*ghcr\.io/\S+:latest")
+
+    def test_it_does_not_try_to_build(self):
+        """A build section would be a fallback that hides a broken pull."""
+        self.assertNotIn("build:", self.text)
+        self.assertNotIn("context:", self.text)
+
+    def test_the_settings_live_in_a_named_volume(self):
+        """A folder on the host would depend on the host and the
+        container sharing a filesystem, which they do not."""
+        self.assertRegex(self.text, r"(?m)^\s*-\s*foxess-config:/config")
+        self.assertNotIn("./config", self.text)
+
+    def test_the_volume_has_a_fixed_name(self):
+        """Otherwise it would be named after the stack."""
+        self.assertRegex(self.text, r"(?m)^\s*name:\s*foxess-config")
+
+    def test_the_port_is_the_same(self):
+        self.assertRegex(self.text, r"(?m)^\s*-\s*\"?\$\{FOXESS_PORT:-8765\}:8765")
+
+    def test_it_comes_back_after_a_reboot(self):
+        self.assertIn("restart: unless-stopped", self.text)
+
+    def test_it_does_not_run_as_root(self):
+        self.assertRegex(self.text, r"(?m)^\s*user:\s*\"?\$\{FOXESS_UID:-1000\}")
+
+    def test_the_log_cannot_fill_the_disk(self):
+        self.assertIn("max-size", self.text)
+        self.assertIn("max-file", self.text)
+
+    def test_it_agrees_with_the_command_line_compose_file(self):
+        """Two compose files, one dashboard: the parts they share must match."""
+        other = read(COMPOSE)
+        for field in ("FOXESS_DASHBOARD_CONFIG", "FOXESS_HOST",
+                      "FOXESS_PORT", "TZ"):
+            self.assertIn(field, self.text)
+            self.assertIn(field, other)
+        for phrase in ("restart: unless-stopped", "max-size", "max-file",
+                       "container_name: foxess-dashboard"):
+            self.assertIn(phrase, self.text)
+            self.assertIn(phrase, other)
+
+
+class TestThePublishWorkflow(unittest.TestCase):
+    """.github/workflows/docker.yml.
+
+    The image has to be published somewhere, because Portainer does not
+    build it.
+    """
+
+    def setUp(self) -> None:
+        self.text = read(WORKFLOW)
+
+    def test_it_builds_on_a_push_to_main(self):
+        self.assertIn("push:", self.text)
+        self.assertRegex(self.text, r"branches:\s*\[main\]")
+
+    def test_it_pushes_to_the_registry(self):
+        self.assertIn("ghcr.io", self.text)
+        self.assertIn("push: true", self.text)
+
+    def test_it_signs_in_with_its_own_token(self):
+        """So there is no secret to set up."""
+        self.assertIn("secrets.GITHUB_TOKEN", self.text)
+
+    def test_it_is_allowed_to_write_packages(self):
+        """Anchored to the line, so a mention in a comment does not count."""
+        self.assertRegex(self.text, r"(?m)^\s*packages:\s*write\s*$")
+
+    def test_it_cannot_do_anything_else(self):
+        self.assertRegex(self.text, r"(?m)^\s*contents:\s*read\s*$")
+
+    def test_it_builds_for_every_architecture(self):
+        """A hosted Intel server, an Apple Silicon Mac, a Pi 4 or 5, a Pi 3."""
+        for platform in ("linux/amd64", "linux/arm64", "linux/arm/v7"):
+            self.assertIn(platform, self.text)
+
+    def test_it_holds_no_secret(self):
+        self.assertNotRegex(self.text, r"(?i)(password|token|secret)\s*[:=]\s*[\"']?[A-Za-z0-9]{16,}")
+
 
     def test_the_settings_are_not_in_the_image(self):
         """Nothing may set the secrets as environment variables in the file."""
