@@ -10,6 +10,7 @@ A standalone web dashboard for a FoxESS (Foxconn) solar installation.
 - **Fits one screen** from 1440×900 down to 320×240, with no scrolling
 - **Runs on a Raspberry Pi**, or drives an **ESP32 LCD** as a thin terminal
 - **Runs in Docker** — one container, the settings mounted in from the host, `./update.sh` to update it
+- **Updates itself** — a push to `main` publishes the image to a registry, and a Portainer stack redeploys itself from it
 - **Zero dependencies** — Python standard library only, no `pip install`
 
 ## Screenshots
@@ -84,11 +85,13 @@ back, and the Pi screens that read it over HTTP — is in
 
 | Section | What you can set |
 |---|---|
+| **Power flow diagram** | which style the big diagram is drawn in — rings or flow |
 | **FoxESS account** | email, password, Open API key, region domain, inverter SN, plant id |
 | **Data sources** | enable/disable the live feed and the totals, poll interval |
 | **Octopus Energy** | API key, account number, tariff — and **Save and test**, which checks them and fills the rest in |
+| **Weather & solar forecast** | the place, the roof's tilt and azimuth, the units, the performance ratio and the array size |
 | **Slides** | which slides to show, in what order, and how often |
-| **Display** | theme (dark/light/auto), power units (kW/W), clock format, timezone, layout, panel visibility |
+| **Display** | theme (dark/light/auto), power units (kW/W), clock format, timezone, layout, fallback poll interval, panel visibility |
 | **Detected** | live readout of what the cloud reports — serial, plant, datalogger, firmware, battery units, min SoC, the Octopus meters, and how the daily figures compare |
 
 Changing the credentials re-wires the live connections immediately — no
@@ -106,7 +109,7 @@ which hands over the whole file — see [Keeping your credentials](#keeping-your
 ## Two ways to draw the power flow
 
 The dashboard ships with two diagram styles, switched from the settings page
-(**Display → Diagram**):
+(**Settings → Power flow diagram → Style**):
 
 **Flow** — the linear diagram: solar on the left, the inverter in the middle
 feeding the house, with the grid and the battery branching off below. The
@@ -162,8 +165,8 @@ is busy showing the battery.
 
 | Style | 800×480 |
 |---|---|
-| Flow | values at 26 px, one row of nodes |
-| Rings | values at 21 px, a hub and four rings — the hub's level at 27 px |
+| Flow | values at 27 px, one row of nodes |
+| Rings | values at 25 px, a hub and four rings — the hub's level at 31 px |
 
 Both styles are checked at every viewport size by `layout_check.py`, so
 neither can quietly break the other.
@@ -657,13 +660,15 @@ not save it — press **Save settings** to keep it.
 | **Raspberry Pi + LCD** | Chromium, an LCD | [`display/README.md`](display/README.md) |
 | **ESP32 + SPI LCD** | MicroPython, a panel | [`display/README.md`](display/README.md) |
 
-The architecture is the same for both: **the server always runs on the Pi** and
-holds the WebSocket session, TLS and credentials. The ESP32 is just a display
-terminal that polls `/api/state`, so none of that has to fit in 320 KB of RAM.
+The architecture is the same for both: **the server runs on the host** — a
+container on a server, or a process on a Pi — and holds the WebSocket session,
+TLS and credentials. The displays are just terminals: the Pi follows
+`/events` (SSE), the ESP32 polls `/api/state`, so none of that has to fit in
+320 KB of RAM.
 
 ```
   ESP32 + LCD  ──► /api/state  ──┐
-                                 ├──► dashboard server (the Pi)
+                                 ├──► dashboard server (the container)
   Pi + LCD     ──► /events (SSE) ─┘
 ```
 
@@ -677,7 +682,7 @@ be sized for it rather than compromised for a range of unknown screens:
 
 | Size | Layout |
 |---|---|
-| **800×480 (the target)** | diagram across the full width, live tiles and totals below; body 15 px, values 24 px, diagram text 14/26 px |
+| **800×480 (the target)** | diagram across the full width, live tiles and totals below; body 15 px, tile values 24 px, diagram values 27 px (flow) or 25 px with a 31 px hub (rings) |
 | ≥ 1000×600 | flow diagram + gauge, totals and system panels below |
 | ~480×320 (3.5" LCD) | numbers only — the diagram is unreadable at this size |
 | ~320×240 (2.8" LCD) | one row of five tiles plus the SoC bar |
@@ -807,8 +812,7 @@ fill in, the credentials it needs, and how to get the settings back out.
 | `FOXESS_DOMAIN` | `https://www.foxesscloud.com` | Use `https://portal.foxesscloud.us` for US accounts |
 | `FOXESS_HOST` | `0.0.0.0` | Bind address |
 | `FOXESS_PORT` | `8765` | Bind port |
-| `FOXESS_API_INTERVAL` | `300` | Seconds between Open API polls |
-| `FOXESS_DASHBOARD_CONFIG` | `./config.json` | Where the settings file lives |
+| `FOXESS_DASHBOARD_CONFIG` | `./config.json` | Where the settings file lives — the environment variable first, then `./config.json`, then `~/.foxess-dashboard/config.json` |
 | `OCTOPUS_API_KEY` | – | Octopus API key — enables the meter readings |
 | `OCTOPUS_ACCOUNT_NUMBER` | – | Octopus account number — the meter is looked up from it |
 | `OCTOPUS_TARIFF` | `flux` | `flux` or `agile` |
@@ -819,6 +823,10 @@ fill in, the credentials it needs, and how to get the settings back out.
 
 Environment variables only **seed** values that are still empty — anything you
 set in the settings page wins from then on.
+
+The Open API poll interval is **not** one of them: it is the `api_interval`
+setting, on the settings page under **Data sources**, and it lives in the
+settings file like everything else.
 
 > Keep the credentials in the settings file or environment variables, never in
 > a committed file. `FOXESS_PASS` is your real FoxESS password; the client
@@ -895,6 +903,7 @@ foxess-dashboard/
 │   ├── config.py           # persistent settings store
 │   ├── octopus.py          # Octopus rates, meter readings, rate bands
 │   ├── weather.py          # Open-Meteo weather, and the solar calibration
+│   ├── sun.py              # sunrise, sunset and the twilights around them
 │   ├── history.py          # half-hourly history of the live power
 │   └── server.py           # HTTP server + SSE
 ├── static/
@@ -906,21 +915,31 @@ foxess-dashboard/
 │   ├── pi_kiosk.py         # Pi kiosk launcher
 │   └── README.md           # hardware + deployment guide
 ├── tests/
-│   ├── test_mapping.py     # parsing, signing, state
-│   ├── test_config.py      # settings store
-│   ├── test_font.py        # renders the font as ASCII art
-│   ├── test_esp32_render.py # renders the ESP32 screen offline
+│   ├── test_mapping.py        # parsing, signing, state
+│   ├── test_config.py         # settings store
+│   ├── test_font.py           # renders the font as ASCII art
+│   ├── test_esp32_render.py   # renders the ESP32 screen offline
 │   ├── test_slides_octopus.py # slides, Octopus, history, daily figures
 │   ├── test_octopus_mini.py   # the Mini: GraphQL, counters, live figures
-│   ├── test_docker.py        # the container: image, compose, update script
-│   └── test_settings_page.py  # the settings page and its fields
-├── docs/                   # screenshots, release notes, the Docker guide
+│   ├── test_settings_page.py  # the settings page and its fields
+│   ├── test_server.py         # the routes, and what they answer
+│   ├── test_diagram.py        # the rings geometry
+│   ├── test_flow_direction.py # the dashes, and the way the wires bend
+│   ├── test_swipe.py          # the swipe, in a real browser
+│   ├── test_sun.py            # sunrise, sunset and the twilights
+│   ├── test_weather.py        # the forecast, and the fit of the array
+│   ├── test_yesterday.py      # yesterday's figures
+│   ├── test_readme.py         # this file: the README against the code
+│   └── test_docker.py         # the container: image, compose, update script
+├── docs/                   # screenshots, release notes, the Docker and
+│                           # Portainer guides
 ├── Dockerfile              # the container image
 ├── docker-compose.yml      # the container, and the settings mounted in
 ├── docker-compose.portainer.yml  # the same, as a Portainer stack
 ├── .github/workflows/docker.yml  # builds the image and publishes it
 ├── update.sh               # pull, build, swap, and roll back if it breaks
 ├── layout_check.py         # asserts the UI fits every screen size
+├── flow_direction_check.py # measures the rendered animation in a browser
 └── README.md
 ```
 
@@ -932,24 +951,27 @@ foxess-dashboard/
 python3 -m unittest discover -s tests -v
 ```
 
-464 tests covering unit conversion (W → kW, kW passthrough), charge/discharge
-direction, grid import vs export, the device-level timestamp quirk of the v1
-real/query endpoint, the Open API signature, secret masking and file
-permissions — and the parts that are easy to get wrong: watts against
+471 tests covering the plain parts — unit conversion (W → kW, kW passthrough),
+charge/discharge direction, grid import vs export, the device-level timestamp
+quirk of the v1 real/query endpoint, the Open API signature, secret masking
+and file permissions.
+
+The parts that are easy to get wrong get their own tests: watts against
 kilowatt-hours, the day the meter readings are missing, the export meter
 point, which of FoxESS's two solar figures is the one the app shows, the
-Octopus Mini's GraphQL calls and running counters, and the solar
-calibration — the weather codes, the daily irradiation, the day boundary
-and the fitting of the array against the inverter's own yield. The sun's
-own times are checked against the forecast service's sunrise and sunset
-for ten places and days, which is what the daylight band is drawn from.
-Yesterday's figures are checked against the inverter's register, day by
-day, and the meter is not asked for a part of a day.  The swipe that turns
-the deck is checked in a real browser, in both directions, and so is the
-gesture that is *not* one - a short drag, a vertical one, and one that
-starts on the gear. The container is checked for the things that would
-only show up on the Pi: that the timezone database is in the image, that
-the container does not run as root, that the settings file is mounted in
+Octopus Mini's GraphQL calls and running counters, and the solar calibration —
+the weather codes, the daily irradiation, the day boundary and the fitting of
+the array against the inverter's own yield. The sun's own times are checked
+against the forecast service's sunrise and sunset for ten places and days,
+which is what the daylight band is drawn from. Yesterday's figures are checked
+against the inverter's register, day by day, and the meter is not asked for a
+part of a day.
+
+The browser is checked as well: the swipe that turns the deck, in both
+directions, and the gestures that are *not* one — a short drag, a vertical
+one, and one that starts on the gear. The container is checked for the things
+that would only show up on the Pi: that the timezone database is in the image,
+that the container does not run as root, that the settings file is mounted in
 and never baked in, and that an update which breaks the container puts the
 old one back.
 

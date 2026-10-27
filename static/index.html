@@ -989,7 +989,7 @@ function applyDisplay(){
     : (d.theme || "dark");
   document.documentElement.dataset.theme = theme;
   document.body.dataset.layout = (d.layout || "auto");
-  document.body.dataset.diagram = (d.diagram || "flow");
+  document.body.dataset.diagram = (d.diagram || "rings");
   document.body.classList.toggle("no-totals", d.show_totals === false);
   document.body.classList.toggle("no-system", d.show_system === false);
   document.body.classList.toggle("no-soc",    d.show_soc === false);

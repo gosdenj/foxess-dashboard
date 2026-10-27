@@ -376,7 +376,18 @@ class TestDiagramSwitching(unittest.TestCase):
         self.index = _read(INDEX)
 
     def test_diagram_attribute_is_set_from_the_settings(self):
-        self.assertIn('document.body.dataset.diagram = (d.diagram || "flow")', self.index)
+        self.assertIn('document.body.dataset.diagram = (d.diagram || "rings")', self.index)
+
+    def test_the_fallback_matches_the_configured_default(self):
+        """The front end falls back to the same style the settings default to.
+
+        The settings always carry a diagram, so the fallback is only reached
+        before the page has been told - but it must not contradict the
+        documented default when it is.
+        """
+        default = DEFAULTS["display"]["diagram"]
+        self.assertEqual(default, "rings")
+        self.assertIn(f'(d.diagram || "{default}")', self.index)
 
     def test_rings_only_apply_to_the_automatic_layout(self):
         """An explicit layout choice from the settings page still wins."""

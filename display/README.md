@@ -8,17 +8,17 @@ Two ways to put the dashboard on a screen.
 | **ESP32 + SPI LCD** | MicroPython, a panel | ~2 s (poll) | A purpose-built native renderer |
 
 Both read the same `/api/state` endpoint from the dashboard server. **The
-server always runs on the Pi** (or anywhere on the LAN) — it holds the
-WebSocket session, the TLS connection and the FoxESS credentials. The ESP32
-is just a dumb display terminal, so none of that has to fit in 320 KB of
-RAM.
+server runs on the host** — a container on a server, or a process on the Pi —
+and it holds the WebSocket session, the TLS connection and the FoxESS
+credentials. The displays are just terminals, so none of that has to fit in
+320 KB of RAM.
 
 ```
   ┌──────────────────┐        HTTP /api/state        ┌──────────────┐
   │  ESP32 + LCD     │ ────────────────────────────► │              │
   │  (display only)  │ ◄─────── JSON snapshot ─────── │   dashboard  │
   └──────────────────┘                                │    server    │
-  ┌──────────────────┐        HTTP /events (SSE)      │  (the Pi)    │
+  ┌──────────────────┐        HTTP /events (SSE)      │  (the host)  │
   │  Pi + LCD        │ ────────────────────────────► │              │
   │  (Chromium)      │ ◄────── live push ──────────── │              │
   └──────────────────┘                                └──────────────┘
