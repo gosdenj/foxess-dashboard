@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FoxESS on a phone — mock-ups</title>
+<style>
+:root{
+  --bg:#0a0e16; --panel:#111827; --panel2:#0f1622; --line:rgba(255,255,255,.08);
+  --text:#e5e9f0; --muted:#8b97ab; --dim:#5d6a80;
+  --pv:#f5b642; --load:#4a9eff; --grid:#a78bfa; --bat:#34d399;
+  --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font-ui);
+     margin:0;padding:32px 20px 80px;line-height:1.5}
+main{max-width:1180px;margin:0 auto}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
+h2{font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
+   margin:44px 0 14px;font-weight:600}
+p.lede{color:var(--muted);max-width:70ch;margin:0 0 8px}
+p.note{color:var(--dim);font-size:14px;max-width:78ch}
+a{color:var(--load)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+      padding:16px 18px;margin:0 0 18px}
+.card h3{margin:0 0 4px;font-size:17px}
+.card p{margin:0;color:var(--muted);font-size:14px}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+figure{margin:0;background:var(--panel2);border:1px solid var(--line);border-radius:12px;
+       padding:10px}
+figure img{width:100%;display:block;border-radius:7px;background:#000}
+figcaption{color:var(--muted);font-size:12px;margin-top:8px;font-family:var(--font-mono)}
+table{border-collapse:collapse;width:100%;margin-top:10px;font-size:13px}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:600;text-transform:uppercase;font-size:11px;
+   letter-spacing:.08em}
+td{font-family:var(--font-mono);color:var(--muted)}
+td.k{font-family:var(--font-ui);color:var(--text)}
+.yes{color:var(--bat)}.no{color:var(--pv)}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--panel2);
+      border:1px solid var(--line);color:var(--muted);font-size:12px;
+      font-family:var(--font-mono);margin-right:6px}
+</style>
+</head>
+<body>
+<main>
+  <h1>FoxESS on a phone</h1>
+  <p class="lede">
+    Mock-ups of the three slides at phone sizes, with the layout proposals
+    that produced them. The photographs are of the real dashboard with the
+    real data pipeline — the demo, fed the longest values the display ever
+    shows — with a stylesheet injected at render time. Nothing in the
+    shipped code was changed to make them.
+  </p>
+  <p class="note">
+    Open a photograph for the full size. The write-up, with the measurements
+    and the risks, is in <a href="../MOBILE.md">docs/MOBILE.md</a>.
+  </p>
+
+  <h2>Today — what a phone gets now</h2>
+  <div class="card">
+    <h3>The phone inherits the tiny-LCD layout</h3>
+    <p>
+      A phone is narrower than 560&nbsp;px, so it falls through to the same
+      breakpoint as a 3.5&nbsp;inch LCD: the diagram is dropped, today's
+      figures are dropped, and the five live numbers are left in a 3&nbsp;+&nbsp;2
+      grid with a great deal of empty screen around them. The type is the
+      LCD's type — 13&nbsp;px body, 17&nbsp;px figures — on a screen that is
+      held in a hand rather than screwed to a wall.
+    </p>
+  </div>
+  <div class="shots">
+    <figure><img src="mobile-today-power-phone-390x844.png" alt="Power slide today">
+      <figcaption>power · 390×844</figcaption></figure>
+    <figure><img src="mobile-today-usage-phone-390x844.png" alt="Usage slide today">
+      <figcaption>usage · 390×844</figcaption></figure>
+    <figure><img src="mobile-today-weather-phone-390x844.png" alt="Weather slide today">
+      <figcaption>weather · 390×844</figcaption></figure>
+  </div>
+
+  <h2>A — portrait, the numbers are the hero</h2>
+  <div class="card">
+    <h3>A phone-native layout, and the page scrolls</h3>
+    <p>
+      The battery gauge beside the four live figures, today's figures as a
+      table underneath, and the slide keeps what it is for. The page scrolls,
+      because “one screen, no scrolling” is a rule for the fixed panels on a
+      wall and not for a phone in a hand. This is the option that touches
+      shared code: the root has to give up <code>overflow:hidden</code> and
+      <code>touch-action:none</code>, and a vertical drag has to be handed
+      back to the browser without the swipe that turns the deck being lost.
+    </p>
+    <p><span class="pill">body 15 px</span><span class="pill">figures 26 px</span>
+       <span class="pill">diagram: no</span><span class="pill">scrolls: yes</span></p>
+  </div>
+  <div class="shots">
+    <figure><img src="mobile-a-power-phone-390x844.png" alt="Candidate A, power slide">
+      <figcaption>power · 390×844</figcaption></figure>
+    <figure><img src="mobile-a-usage-phone-390x844.png" alt="Candidate A, usage slide">
+      <figcaption>usage · 390×844</figcaption></figure>
+    <figure><img src="mobile-a-weather-phone-390x844.png" alt="Candidate A, weather slide">
+      <figcaption>weather · 390×844</figcaption></figure>
+  </div>
+
+  <h2>B — landscape, laid out like the Raspberry Pi</h2>
+  <div class="card">
+    <h3>One new breakpoint, and nothing else changes</h3>
+    <p>
+      A phone in landscape is 844×390, very close to the Pi's 800×480. This
+      option gives it the Pi's arrangement — the rings diagram across the
+      top, the live figures and today's underneath — with the type a little
+      smaller because the height is 390 rather than 480. The gesture code,
+      the root overflow and the slide model are all left exactly as they
+      are, which makes this the cheapest and the safest of the three.
+    </p>
+    <p><span class="pill">body 14 px</span><span class="pill">figures 22 px</span>
+       <span class="pill">diagram: yes, 14 px</span><span class="pill">scrolls: no</span></p>
+  </div>
+  <div class="shots">
+    <figure><img src="mobile-b-power-phone-landscape-844x390.png" alt="Candidate B, power slide">
+      <figcaption>power · 844×390</figcaption></figure>
+    <figure><img src="mobile-b-usage-phone-landscape-844x390.png" alt="Candidate B, usage slide">
+      <figcaption>usage · 844×390</figcaption></figure>
+    <figure><img src="mobile-b-weather-phone-landscape-844x390.png" alt="Candidate B, weather slide">
+      <figcaption>weather · 844×390</figcaption></figure>
+  </div>
+
+  <h2>C — portrait, with the diagram kept</h2>
+  <div class="card">
+    <h3>The diagram as a shape, not as a chart</h3>
+    <p>
+      The rings diagram stays, above the numbers. It reads at a glance — solar
+      on the left, the house on the right, the hub in the middle — but its own
+      numbers come out at about 12&nbsp;px, because the diagram is a
+      900-unit-wide drawing scaled down to the width of the phone. Making it
+      legible would mean drawing a second, portrait diagram: real work, and
+      not mocked up here.
+    </p>
+    <p><span class="pill">body 15 px</span><span class="pill">figures 24 px</span>
+       <span class="pill">diagram: yes, 12 px</span><span class="pill">scrolls: no</span></p>
+  </div>
+  <div class="shots">
+    <figure><img src="mobile-c-power-phone-390x844.png" alt="Candidate C, power slide">
+      <figcaption>power · 390×844</figcaption></figure>
+    <figure><img src="mobile-c-usage-phone-390x844.png" alt="Candidate C, usage slide">
+      <figcaption>usage · 390×844</figcaption></figure>
+    <figure><img src="mobile-c-weather-phone-390x844.png" alt="Candidate C, weather slide">
+      <figcaption>weather · 390×844</figcaption></figure>
+  </div>
+
+  <h2>The settings page needs nothing</h2>
+  <div class="card">
+    <h3>It already works on a phone</h3>
+    <p>
+      The settings page is a single column with large tap targets, a sticky
+      action bar and no horizontal overflow, so it is already usable at
+      390&nbsp;px. It is the one part of the dashboard that does not need
+      designing for a phone.
+    </p>
+  </div>
+  <div class="shots">
+    <figure><img src="settings-phone-390x844.png" alt="The settings page on a phone">
+      <figcaption>settings · 390×844</figcaption></figure>
+  </div>
+</main>
+</body>
+</html>

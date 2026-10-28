@@ -940,6 +940,10 @@ foxess-dashboard/
 ├── update.sh               # pull, build, swap, and roll back if it breaks
 ├── layout_check.py         # asserts the UI fits every screen size
 ├── flow_direction_check.py # measures the rendered animation in a browser
+├── mockups/                # the phone layouts, as proposals and pictures
+│   ├── mobile.css          # the proposal stylesheet
+│   └── render_mobile.py    # renders the mock-ups into docs/mockups/
+├── docs/MOBILE.md          # the phone investigation and the mock-ups
 └── README.md
 ```
 

@@ -105,8 +105,10 @@ class TestFileTree(unittest.TestCase):
         tree = tree[:tree.index("```")]
 
         missing = []
-        for folder in ("", "foxess", "tests"):
+        for folder in ("", "foxess", "tests", "display", "mockups"):
             directory = os.path.join(ROOT, folder)
+            if not os.path.isdir(directory):
+                continue
             for name in sorted(os.listdir(directory)):
                 if not name.endswith(".py"):
                     continue

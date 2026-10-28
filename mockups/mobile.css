@@ -1,0 +1,226 @@
+/* =====================================================================
+   Mobile mock-ups: a proposal layer, not production CSS.
+
+   Nothing in this file is served to anybody.  The renderer
+   (mockups/render_mobile.py) injects it into the running dashboard and
+   sets body[data-candidate] to one of the letters below, so each
+   option can be looked at as a picture before any of it is written
+   into static/index.html.
+
+   Three options are proposed, and they answer three different
+   questions:
+
+     a  the phone as a portrait device - the numbers are the hero,
+        the page is allowed to scroll, the diagram is dropped
+     b  the phone in landscape, laid out like the Raspberry Pi panel
+     c  the phone in portrait, with the diagram kept as a glanceable
+        shape above the numbers
+
+   Every rule is scoped to body[data-candidate="..."], so the layer can
+   be dropped in and out of the page without touching anything else.
+
+   The selectors are deliberately as specific as the rules they have to
+   beat - the dashboard's own small-screen rules are written as
+   "body .dash[data-slide=...]", and a proposal that lost to them would
+   be a proposal that does not work.
+   ===================================================================== */
+
+/* =====================================================================
+   A - the phone as a portrait device
+   ---------------------------------------------------------------------
+   The Live panel becomes the hero: the battery gauge on the left, the
+   four live figures in a two-up grid beside it.  Today's figures sit
+   underneath.
+
+   The page scrolls.  "One screen, no scrolling" is a rule for the
+   fixed panels on a wall - a phone in a hand is a different object,
+   and the 800x480 rule was written for a screen that cannot scroll.
+   That means the root has to let go of overflow:hidden and of
+   touch-action:none, and the gesture code has to hand a vertical
+   drag back to the browser.  That is the part of this option that
+   touches shared code, and it is the reason it is a separate option.
+   ===================================================================== */
+body[data-candidate="a"] .stage{
+  overflow-y:auto; overflow-x:hidden;
+  /* the browser may scroll the page, but the swipe that turns the
+     deck is still ours: pan-y leaves the horizontal drag to us */
+  touch-action:pan-y;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+}
+body[data-candidate="a"] .dash{
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:auto auto;
+  grid-template-areas:"side" "totals";
+  min-height:100%;
+  align-content:start;
+}
+/* the Live panel: the gauge beside the figures */
+body[data-candidate="a"] .side{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  grid-template-areas:"head head" "gauge tiles";
+  gap:var(--gap);
+  align-items:center;
+}
+body[data-candidate="a"] .side>h2{grid-area:head;margin:0}
+body[data-candidate="a"] .side .gauge{
+  grid-area:gauge;display:flex;flex-direction:column;align-items:center;
+  gap:.2em;
+}
+body[data-candidate="a"] .side .gauge svg{height:104px}
+body[data-candidate="a"] .side .gauge .big{font-size:26px}
+body[data-candidate="a"] .side .tiles{
+  grid-area:tiles;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  margin-top:0!important;
+  gap:var(--gap);
+}
+body[data-candidate="a"] .side .tile.soc{display:none}  /* the gauge says it */
+body[data-candidate="a"] .side .socbar{display:none}
+body[data-candidate="a"] .side .flowhint.tiny-only{display:none}
+/* bigger figures - a phone is read at arm's length, not across a room */
+body[data-candidate="a"]{--fs:15px;--fsl:12px;--fsb:26px}
+body[data-candidate="a"] .tile .v{font-size:26px}
+body[data-candidate="a"] .tile .note{white-space:normal}
+/* today's figures: the table, at a size a thumb can read */
+body[data-candidate="a"] .dash[data-slide="power"]{
+  grid-template-areas:"side" "totals";
+}
+body[data-candidate="a"] .totals{display:flex}
+body[data-candidate="a"] .totals .scroll{overflow:visible;mask-image:none;-webkit-mask-image:none}
+body[data-candidate="a"] .totals table{font-size:13px}
+body[data-candidate="a"] .totals td{padding:.35em 0}
+
+/* the usage slide: the chart, the Octopus figures and today's */
+body[data-candidate="a"] .dash[data-slide="usage"]{
+  grid-template-rows:auto auto auto;
+  grid-template-areas:"usage" "octopus" "today";
+}
+body[data-candidate="a"] .dash[data-slide="usage"] .octopus,
+body[data-candidate="a"] .dash[data-slide="usage"] .today{display:flex}
+body[data-candidate="a"] .dash[data-slide="usage"] .chartbox{min-height:150px}
+/* the legend is one long row: on a narrow screen the last label is cut off */
+body[data-candidate="a"] .legend{flex-wrap:wrap;gap:.5em .9em}
+body[data-candidate="a"] .legend span{white-space:nowrap}
+body[data-candidate="a"] .octopus .tiles{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+body[data-candidate="a"] .today .tiles{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+
+/* the weather slide: right now, the forecast, then the week */
+body[data-candidate="a"] .dash[data-slide="weather"]{
+  grid-template-rows:auto auto auto;
+  grid-template-areas:"now" "sun" "week";
+}
+body[data-candidate="a"] .dash[data-slide="weather"] .sun{display:flex}
+body[data-candidate="a"] .week .days{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+
+/* =====================================================================
+   B - the phone in landscape, laid out like the Pi panel
+   ---------------------------------------------------------------------
+   A phone in landscape is 844x390 - very close to the Pi's 800x480.
+   The whole option is one new breakpoint: the Pi's arrangement, with
+   the type a little smaller because the height is 390 rather than
+   480.  Nothing else changes, and in particular the gesture code,
+   the root overflow and the slide model are untouched - which makes
+   this the cheapest and the safest of the three.
+   ===================================================================== */
+@media (min-width:700px) and (max-height:430px){
+  body[data-candidate="b"]{
+    --fs:14px; --fsl:12px; --fsb:22px; --gap:6px; --pad:8px;
+  }
+  body[data-candidate="b"] .dash[data-slide="power"]{
+    grid-template-columns:minmax(0,2fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1.1fr) minmax(0,1fr);
+    grid-template-areas:"flow flow" "side totals";
+  }
+  body[data-candidate="b"] .dash[data-slide="power"] .flow{display:flex}
+  body[data-candidate="b"] .system{display:none}
+  /* the small-screen rules drop today's figures; on a phone in landscape
+     there is room for them, and they are half the point of the screen */
+  body[data-candidate="b"] .totals{display:flex}
+  body[data-candidate="b"] .gauge{display:none}
+  body[data-candidate="b"] .socbar{display:block}
+  body[data-candidate="b"] .totals .hint{display:none}
+  body[data-candidate="b"] .tiles{
+    grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    gap:calc(var(--gap) * .7);
+  }
+  body[data-candidate="b"] .tile{padding:.4em .5em}
+  body[data-candidate="b"] .flowsvg .lbl{font-size:14px}
+  body[data-candidate="b"] .flowsvg .val{font-size:24px}
+  body[data-candidate="b"] .ringsvg .rval{font-size:22px}
+  body[data-candidate="b"] .ringsvg .rval.rhub{font-size:27px}
+  body[data-candidate="b"] .ringsvg .rname{font-size:12px}
+  body[data-candidate="b"] .ringsvg .rstatus{font-size:11px}
+  body[data-candidate="b"] .flowhint{font-size:12px}
+  /* the two-panel slides keep the Pi's own arrangement */
+  /* the Pi's own arrangement for this slide: the chart beside the
+     Octopus figures, today's tiles across the bottom */
+  body[data-candidate="b"] .dash[data-slide="usage"]{
+    grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1.32fr) minmax(0,1fr);
+    grid-template-areas:"usage octopus" "today today";
+  }
+  body[data-candidate="b"] .dash[data-slide="usage"] .octopus,
+  body[data-candidate="b"] .dash[data-slide="usage"] .today{display:flex}
+  body[data-candidate="b"] .octopus .tiles{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body[data-candidate="b"] .today .tiles{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+  /* yesterday's comparison needs more width than a column that narrow has:
+     the layout drops content before it shrinks the type */
+  body[data-candidate="b"] .today .tile .cmp{display:none}
+  body[data-candidate="b"] .dash[data-slide="weather"]{
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr) minmax(0,1fr);
+    grid-template-areas:"now sun" "week week";
+  }
+  body[data-candidate="b"] .dash[data-slide="weather"] .sun{display:flex}
+}
+
+/* =====================================================================
+   C - the phone in portrait, with the diagram kept
+   ---------------------------------------------------------------------
+   The rings diagram is a shape at this width rather than a chart: the
+   hub and the four rings still read at a glance - solar on the left,
+   the house on the right - while the numbers underneath carry the
+   detail.
+
+   It is worth being honest about the limit of this option: the diagram
+   is drawn in a 900-unit wide SVG that is scaled down to the width of
+   the phone, so its own type comes out at about eleven pixels.  Making
+   it legible would mean drawing a second, portrait diagram - real work,
+   and not mocked up here.
+   ===================================================================== */
+body[data-candidate="c"]{--fs:15px;--fsl:12px;--fsb:24px}
+body[data-candidate="c"] .dash[data-slide="power"]{
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:auto auto;
+  grid-template-areas:"flow" "side";
+  align-content:start;
+}
+body[data-candidate="c"] .dash[data-slide="power"] .flow{display:flex}
+body[data-candidate="c"] .flow h2{display:none}
+body[data-candidate="c"] .flowwrap{flex:none;height:190px}
+body[data-candidate="c"] .side .tiles{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  margin-top:0!important;
+}
+body[data-candidate="c"] .side .tile.soc{display:none}
+body[data-candidate="c"] .side .socbar{display:none}
+body[data-candidate="c"] .side .flowhint.tiny-only{display:none}
+body[data-candidate="c"] .tile .v{font-size:24px}
+body[data-candidate="c"] .dash[data-slide="usage"]{
+  grid-template-rows:auto auto auto;
+  grid-template-areas:"usage" "octopus" "today";
+}
+body[data-candidate="c"] .dash[data-slide="usage"] .octopus,
+body[data-candidate="c"] .dash[data-slide="usage"] .today{display:flex}
+body[data-candidate="c"] .legend{flex-wrap:wrap;gap:.5em .9em}
+body[data-candidate="c"] .legend span{white-space:nowrap}
+body[data-candidate="c"] .dash[data-slide="weather"]{
+  grid-template-rows:auto auto auto;
+  grid-template-areas:"now" "sun" "week";
+}
+body[data-candidate="c"] .dash[data-slide="weather"] .sun{display:flex}
+body[data-candidate="c"] .week .days{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+body[data-candidate="c"] .today .tiles{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+body[data-candidate="c"] .today .tile .cmp{display:none}
