@@ -1,6 +1,6 @@
 """Render the dashboard at several viewport sizes and assert it never scrolls.
 
-    python3 layout_check.py [port] [--diagrams flow,rings]
+    python3 layout_check.py [port] [--diagrams flow,rings] [--sizes a,b]
 
 Both diagram styles are checked - the linear flow and the rings hub - because
 they lay the page out differently and one can fit where the other does not.
@@ -8,22 +8,35 @@ they lay the page out differently and one can fit where the other does not.
 Checks that documentElement.scrollHeight <= clientHeight (no vertical page
 scroll) and scrollWidth <= clientWidth (no horizontal page scroll) at each
 size, and that the key values are actually on screen.
+
+A phone is the one size that is allowed to scroll, because it is held in a
+hand rather than screwed to a wall: there the slide scrolls inside the
+stage, the page does not, and the figures have to be legible at arm's
+length.
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
-CHROME = "/root/.cache/ms-playwright/chromium-1243/chrome-linux/chrome"
+#: The chromium the Pi image carries.  A local Chrome is used instead when
+#: there is one, so the check can be run on a laptop as well.
+LINUX_CHROME = "/root/.cache/ms-playwright/chromium-1243/chrome-linux/chrome"
+#: Where the photographs go.
+DOCS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs")
 PORT = sys.argv[1] if len(sys.argv) > 1 else "8770"
 DIAGRAMS = ["flow", "rings"]
 #: --sizes laptop,pi-lcd-800x480 narrows the sweep, for a quick check.
 SIZES_FILTER: list[str] = []
+OUT_DIR = DOCS
 for _i, _a in enumerate(sys.argv):
     if _a == "--diagrams" and _i + 1 < len(sys.argv):
         DIAGRAMS = sys.argv[_i + 1].split(",")
     if _a == "--sizes" and _i + 1 < len(sys.argv):
         SIZES_FILTER = sys.argv[_i + 1].split(",")
+    if _a == "--out" and _i + 1 < len(sys.argv):
+        OUT_DIR = sys.argv[_i + 1]
 URL = f"http://127.0.0.1:{PORT}/"
 
 #: Every slide has to fit on one screen, so all of them are checked.
@@ -37,14 +50,30 @@ SIZES = [
     ("small-lcd-480x320", 480, 320),
     ("esp32-320x240", 320, 240),
     ("narrow-320x480", 320, 480),
+    # A phone, held in a hand: narrow, and taller than it is wide.  It is
+    # allowed to scroll, so the checks are different - see "phone" below.
+    ("phone-390x844", 390, 844),
+    ("phone-360x800", 360, 800),
 ]
 
 failures = []
+os.makedirs(OUT_DIR, exist_ok=True)
+
+
+def launch(p):
+    """The Pi's chromium if it is there, the local Chrome if it is not."""
+    if os.path.exists(LINUX_CHROME):
+        return p.chromium.launch(executable_path=LINUX_CHROME,
+                                 args=["--no-sandbox", "--disable-gpu",
+                                       "--disable-dev-shm-usage"])
+    try:
+        return p.chromium.launch(channel="chrome")
+    except Exception:
+        return p.chromium.launch()
+
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(executable_path=CHROME,
-                                args=["--no-sandbox", "--disable-gpu",
-                                      "--disable-dev-shm-usage"])
+    browser = launch(p)
     # Stop the rotation while the check runs, or the server moves on to the
     # next slide half way through measuring one.
     page = browser.new_page(viewport={"width": 800, "height": 480})
@@ -192,7 +221,10 @@ with sync_playwright() as p:
                   const truncated = v ? v.scrollWidth > v.clientWidth + 1 : false;
                   const labelCut = k ? k.scrollWidth > k.clientWidth + 1 : false;
                   return {k: e.querySelector('.k').textContent.trim(),
+                          // below the fold is fine on a phone, which scrolls;
+                          // cut off at the side is not fine anywhere
                           cut: r.bottom > innerHeight + 1 || r.right > innerWidth + 1,
+                          cutSide: r.right > innerWidth + 1 || r.left < -1,
                           truncated, labelCut};
               });
               // Rendered type sizes, so "does it fit" cannot be achieved by
@@ -207,6 +239,17 @@ with sync_playwright() as p:
                   vScroll: d.scrollHeight - d.clientHeight,
                   hScroll: d.scrollWidth - d.clientWidth,
                   bodyOverflow: getComputedStyle(b).overflow,
+                  // the phone scrolls: the stage is the thing that moves
+                  stageScroll: (() => {
+                      const s = document.querySelector('.stage');
+                      if (!s) return 0;
+                      return s.scrollHeight - s.clientHeight;
+                  })(),
+                  stageOverflow: (() => {
+                      const s = document.querySelector('.stage');
+                      return s ? getComputedStyle(s).overflowY : '';
+                  })(),
+                  touchAction: getComputedStyle(b).touchAction,
                   flow: vis(".flowsvg"),
                   // the battery level may be in the panel or in the diagram
                   // the battery level, wherever it is shown
@@ -215,6 +258,7 @@ with sync_playwright() as p:
                         || vis(".side .tile.soc")),
                   tiles: tiles,
                   allTilesOnScreen: tiles.every(t => !t.cut),
+                  allTilesOnScreenSide: tiles.every(t => !t.cutSide),
                   anyTruncated: tiles.some(t => t.truncated || t.labelCut),
                   type: {
                       body: px("body"),
@@ -306,20 +350,29 @@ with sync_playwright() as p:
           }""")
 
           suffix = f"-{diagram}" if diagram != "flow" else ""
-          page.screenshot(path=f"/workspace/foxess-dashboard/docs/layout-{name}{suffix}.png")
+          page.screenshot(path=os.path.join(OUT_DIR, f"layout-{name}{suffix}.png"))
 
           vscroll, hscroll = m["vScroll"], m["hScroll"]
           t = m["type"]
           # Legibility floors - a physical LCD has to be readable at a glance.
           tiny = name.startswith(("esp32", "small", "narrow"))
+          # A phone is read closer than a panel on a wall, so its floors are
+          # higher, not lower.
+          phone = name.startswith("phone")
           floors = {
-              "body": 12.0, "heading": 10.0, "tileLabel": 9.5, "tileValue": 15.0,
-              "svgLabel": 8.0, "svgValue": 14.0,
-              "weatherValue": 20.0, "weatherDay": 11.0, "weatherKv": 10.0,
+              "body": 14.0 if phone else 12.0,
+              "heading": 11.0 if phone else 10.0,
+              "tileLabel": 11.0 if phone else 9.5,
+              "tileValue": 20.0 if phone else 15.0,
+              "svgLabel": 8.0,
+              "svgValue": 14.0,
+              "weatherValue": 22.0 if phone else 20.0,
+              "weatherDay": 12.0 if phone else 11.0,
+              "weatherKv": 11.0 if phone else 10.0,
           }
           tooSmall = {k: (round(v, 1), floors[k]) for k, v in t.items() if v < floors[k]}
           # the tiny layout drops the diagram entirely, so SVG floors don't apply
-          if tiny:
+          if tiny or phone:
               tooSmall = {k: v for k, v in tooSmall.items()
                           if not k.startswith("svg")}
           # a slide with no diagram (the energy one) has no SVG type to check
@@ -334,12 +387,22 @@ with sync_playwright() as p:
           # The power slide is the one with the live tiles and the battery
           # gauge. The other slides have their own panels.
           power = (slide == "power")
+          # A phone scrolls, so a tile below the fold is where it should be:
+          # it must not be cut off at the side, and the stage must be the
+          # thing that scrolls rather than the page.
+          tilesOk = m["allTilesOnScreenSide"] if phone else m["allTilesOnScreen"]
+          scrollsOk = True
+          if phone:
+            scrollsOk = (m["stageOverflow"] == "auto"
+                         and m["touchAction"] == "pan-y"
+                         and m["stageScroll"] >= 0)
           ok = (vscroll <= 0 and hscroll <= 0
                 and (m["soc"] or not power)
                 # four on a big screen (the SoC tile is folded into the
                 # ring), five on a small one
                 and (len(m["tiles"]) >= 4 or not power)
-                and m["allTilesOnScreen"]
+                and tilesOk
+                and scrollsOk
                 and not m["anyTruncated"] and not tooSmall
                 and not m["clippedPanels"] and not m["clippedCards"]
                 and not m["ringText"])

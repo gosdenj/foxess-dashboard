@@ -7,7 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -18,6 +18,17 @@ from foxess.state import DashboardState  # noqa: E402
 
 INDEX = os.path.join(os.path.dirname(__file__), "..", "static", "index.html")
 SETTINGS = os.path.join(os.path.dirname(__file__), "..", "static", "settings.html")
+
+#: The three days the fixtures are built on.
+#:
+#: They are counted back from today rather than being fixed, because the
+#: window the calibration compares against is three weeks wide and it moves
+#: with the calendar.  A fixed set of dates falls out of that window after
+#: three weeks, and the tests then start failing on their own - which is
+#: how this one came to be a test about the calendar rather than about the
+#: sun.
+PAST_DAYS = [(date.today() - timedelta(days=offset)).isoformat()
+             for offset in (3, 2, 1)]
 
 
 def _read(path: str) -> str:
@@ -40,13 +51,13 @@ def _raw(hours=None, current_hour=12, offset=0, daily=None):
     if hours is None:
         hours = [(0, 0.0), (6, 100.0), (12, 800.0), (18, 100.0), (23, 0.0)]
     times, values = [], []
-    for day in ("2026-10-05", "2026-10-06", "2026-10-07"):
+    for day in PAST_DAYS:
         for hour, value in hours:
             times.append(f"{day}T{hour:02d}:00")
             values.append(value)
     if daily is None:
         daily = {
-            "time": ["2026-10-05", "2026-10-06", "2026-10-07"],
+            "time": list(PAST_DAYS),
             "weather_code": [3, 0, 61],
             "temperature_2m_max": [15.0, 16.0, 13.0],
             "temperature_2m_min": [7.0, 8.0, 6.0],
@@ -54,8 +65,8 @@ def _raw(hours=None, current_hour=12, offset=0, daily=None):
             "precipitation_probability_max": [60, 0, 90],
             "wind_speed_10m_max": [22.0, 12.0, 30.0],
             "wind_direction_10m_dominant": [215, 180, 270],
-            "sunrise": ["2026-10-05T07:00", "2026-10-06T07:00", "2026-10-07T07:00"],
-            "sunset": ["2026-10-05T18:00", "2026-10-06T18:00", "2026-10-07T18:00"],
+            "sunrise": [f"{day}T07:00" for day in PAST_DAYS],
+            "sunset": [f"{day}T18:00" for day in PAST_DAYS],
             "uv_index_max": [2.1, 2.4, 1.2],
         }
     return {
@@ -64,7 +75,7 @@ def _raw(hours=None, current_hour=12, offset=0, daily=None):
         "utc_offset_seconds": offset,
         "timezone": "Europe/London",
         "current": {
-            "time": f"2026-10-06T{current_hour:02d}:00",
+            "time": f"{PAST_DAYS[1]}T{current_hour:02d}:00",
             "temperature_2m": 12.5,
             "apparent_temperature": 10.0,
             "is_day": 1,
@@ -194,9 +205,9 @@ class TestDailyIrradiation(unittest.TestCase):
     def test_sums_the_hours_into_days(self):
         raw = _raw()
         days = weather.daily_irradiation(raw)
-        self.assertEqual(sorted(days), ["2026-10-05", "2026-10-06", "2026-10-07"])
+        self.assertEqual(sorted(days), sorted(PAST_DAYS))
         # 100 + 800 + 100 W/m² over an hour each = 1.0 kWh/m²
-        self.assertAlmostEqual(days["2026-10-06"], 1.0, places=6)
+        self.assertAlmostEqual(days[PAST_DAYS[1]], 1.0, places=6)
 
     def test_the_plant_timezone_moves_the_day_boundary(self):
         # 23:00 in London is 22:00 UTC, and a place in Tokyo counts that
@@ -205,21 +216,21 @@ class TestDailyIrradiation(unittest.TestCase):
         raw["timezone"] = "UTC"
         london = weather.daily_irradiation(raw, "UTC")
         tokyo = weather.daily_irradiation(raw, "Asia/Tokyo")
-        self.assertIn("2026-10-05", london)
-        self.assertIn("2026-10-06", tokyo)
+        self.assertIn(PAST_DAYS[0], london)
+        self.assertIn(PAST_DAYS[1], tokyo)
 
     def test_missing_values_are_skipped(self):
         raw = _raw()
         raw["hourly"]["global_tilted_irradiance"][0] = None
         days = weather.daily_irradiation(raw)
-        self.assertAlmostEqual(days["2026-10-05"], 1.0, places=6)
+        self.assertAlmostEqual(days[PAST_DAYS[0]], 1.0, places=6)
 
 
 class TestIrradiationSoFar(unittest.TestCase):
     def test_only_todays_hours(self):
         raw = _raw(hours=[(0, 100.0), (12, 800.0)], current_hour=15)
         day, total = weather.irradiation_so_far(raw)
-        self.assertEqual(day, "2026-10-06")
+        self.assertEqual(day, PAST_DAYS[1])
         # the two complete hours of today - and not the same two on the
         # other two days
         self.assertAlmostEqual(total, 0.9, places=6)
@@ -227,7 +238,7 @@ class TestIrradiationSoFar(unittest.TestCase):
     def test_an_hour_that_is_still_running_is_left_out(self):
         raw = _raw(hours=[(0, 100.0), (12, 800.0)], current_hour=12)
         day, total = weather.irradiation_so_far(raw)
-        self.assertEqual(day, "2026-10-06")
+        self.assertEqual(day, PAST_DAYS[1])
         self.assertAlmostEqual(total, 0.1, places=6)
 
     def test_nothing_without_a_current_time(self):
@@ -292,7 +303,7 @@ class TestParse(unittest.TestCase):
         raw = _raw()
         parsed = weather.parse(raw, "Somewhere")
         self.assertEqual([d["date"] for d in parsed["days"]],
-                         ["2026-10-06", "2026-10-07"])
+                         [PAST_DAYS[1], PAST_DAYS[2]])
 
     def test_the_days_carry_their_sun(self):
         raw = _raw()
@@ -528,10 +539,12 @@ class TestLiveFeedFitting(unittest.TestCase):
         # 1.0 kWh/m² a day, so the yield is *factor* kWh a day.  The feed
         # is in kW, and each slot is half an hour.
         kw = factor / (48 * 0.5)
-        for day in (5, 6, 7):
+        for day in PAST_DAYS:
+            midnight = datetime.fromisoformat(day)
             for slot in range(48):
-                when = datetime(2026, 10, day, slot // 2, slot % 2 * 30,
-                                tzinfo=timezone.utc).timestamp()
+                when = midnight.replace(hour=slot // 2,
+                                        minute=slot % 2 * 30,
+                                        tzinfo=timezone.utc).timestamp()
                 history.add({"pvPower": kw, "loadsPower": 0,
                              "gridConsumptionPower": 0, "feedinPower": 0,
                              "batChargePower": 0, "batDischargePower": 0,
@@ -540,16 +553,24 @@ class TestLiveFeedFitting(unittest.TestCase):
 
     def test_the_daily_solar_is_read_from_the_history(self):
         history = self._history(4.7)
-        # The history is from a fixed date, so the window has to be wide
-        # enough to reach it - the default window is three weeks, and it
-        # moves on with the calendar.
+        # The history is from the last few days, so the window the
+        # calibration compares against - three weeks, and it moves with the
+        # calendar - always reaches it.
         days = history.daily_pv("Europe/London", days=3650)
-        for date in ("2026-10-06", "2026-10-07"):
-            self.assertAlmostEqual(days[date], 4.7, places=1)
-        # The days are the plant's, not UTC's, so the first day starts an
-        # hour late and the last half hour lands on the next day.
-        self.assertLess(days["2026-10-05"], 4.7)
-        self.assertIn("2026-10-08", days)
+        # Every sample but the first is worth half an hour of sun; the
+        # first one only sets the clock.
+        self.assertAlmostEqual(sum(days.values()),
+                               (3 * 48 - 1) * 4.7 / 48, places=3)
+        # The days are the plant's, not UTC's, so a day can be split at
+        # midnight and land on two dates.  Which ones depends on whether
+        # the plant is on summer time, so the split is checked rather than
+        # hard-coded: all three days are there, and no more than one extra
+        # day to catch what spilled over.
+        self.assertEqual(set(days) & set(PAST_DAYS), set(PAST_DAYS))
+        self.assertLessEqual(len(days), len(PAST_DAYS) + 1)
+        # and no day holds more than a whole day of sun
+        for value in days.values():
+            self.assertLessEqual(value, 4.7 + 1e-6)
 
     def test_the_array_is_fitted_without_the_open_api(self):
         import run as app
@@ -696,9 +717,9 @@ class TestTwilight(unittest.TestCase):
         # the forecast's own sunrise and sunset are what the slide shows
         # everywhere else, so the twilight is moved to sit around them
         daily = {
-            "time": ["2026-10-05", "2026-10-06", "2026-10-07"],
-            "sunrise": ["2026-10-05T05:11", "2026-10-06T05:11", "2026-10-07T05:11"],
-            "sunset": ["2026-10-05T19:44", "2026-10-06T19:44", "2026-10-07T19:44"],
+            "time": list(PAST_DAYS),
+            "sunrise": [f"{day}T05:11" for day in PAST_DAYS],
+            "sunset": [f"{day}T19:44" for day in PAST_DAYS],
         }
         payload = weather.parse(_raw(daily=daily))
         day = payload["days"][0]

@@ -8,6 +8,7 @@ A standalone web dashboard for a FoxESS (Foxconn) solar installation.
 - **Settings page** for credentials and display preferences, persisted to disk
 - **Export and import** the settings, so credentials are never retyped
 - **Fits one screen** from 1440×900 down to 320×240, with no scrolling
+- **Works on a phone** — a portrait layout of its own, which may scroll
 - **Runs on a Raspberry Pi**, or drives an **ESP32 LCD** as a thin terminal
 - **Runs in Docker** — one container, the settings mounted in from the host, `./update.sh` to update it
 - **Updates itself** — a push to `main` publishes the image to a registry, and a Portainer stack redeploys itself from it
@@ -659,6 +660,7 @@ not save it — press **Save settings** to keep it.
 |---|---|---|
 | **Raspberry Pi + LCD** | Chromium, an LCD | [`display/README.md`](display/README.md) |
 | **ESP32 + SPI LCD** | MicroPython, a panel | [`display/README.md`](display/README.md) |
+| **A phone** | a browser | [On a phone](#on-a-phone) |
 
 The architecture is the same for both: **the server runs on the host** — a
 container on a server, or a process on a Pi — and holds the WebSocket session,
@@ -693,7 +695,7 @@ Verify it against your actual panel:
 python3 layout_check.py          # needs playwright
 ```
 
-It asserts, at eight viewport sizes, that:
+It asserts, at ten viewport sizes, that:
 
 - `scrollHeight <= clientHeight` — no page scrolling
 - every value is fully on screen, and **no number is truncated** (a value
@@ -705,6 +707,52 @@ That last check is the important one. The layout adapts by *dropping content*
 first — the diagram on small panels, the captions, the optional rows — and only
 then by adjusting the grid. It never buys space by shrinking the text into
 illegibility.
+
+---
+
+## On a phone
+
+A phone in portrait is 390×844 — narrower than the Pi's panel and much taller.
+It used to fall through the small-screen breakpoints and get the leftovers: the
+diagram dropped, today's figures dropped, the Octopus figures dropped, the
+solar forecast dropped, and 13 px text. It was the Pi with the interesting
+parts taken out.
+
+A phone now has a layout of its own, in one deliberately narrow media query:
+
+```css
+@media (max-width:560px) and (min-height:600px){ ... }
+```
+
+Both halves matter. The width excludes the Pi, the small LCDs, the ESP32 and
+the narrow 320×480 panel; the height excludes anything wide but short. No
+display that exists today can match it, and `tests/test_phone_layout.py` says
+so.
+
+| | what the phone gets |
+|---|---|
+| **Power** | the battery ring beside the four live figures, today's figures as a table underneath |
+| **Usage** | the chart, the Octopus figures and today's tiles |
+| **Weather** | the conditions, the solar forecast and the week |
+| **The diagram** | dropped — its own type comes out at 11 px at this width |
+| **Type** | body 14 px, figures 26 px |
+
+**A phone may scroll.** The "one screen, no scrolling" rule above is for panels
+that are screwed to a wall. A phone is held in a hand, so the slide is allowed
+to be taller than the viewport, and the stage scrolls it.
+
+**The swipe still turns the deck.** The browser is given the vertical pan and
+keeps its hands off the horizontal one, so a sideways drag is still the
+dashboard's. The gesture code is no different on a phone — the same 60 px, the
+same sideways slop — and a phone shows the same slide as the Pi at the same
+moment, because the server owns the slide.
+
+`layout_check.py` knows about the phone and enforces **higher** floors for it
+than for the fixed panels (body 14 px, figures 20 px): a phone is read closer
+than a panel on a wall.
+
+The investigation, the measurements, and the two alternatives that were not
+taken are in [`docs/MOBILE.md`](docs/MOBILE.md).
 
 ---
 
@@ -930,7 +978,8 @@ foxess-dashboard/
 │   ├── test_weather.py        # the forecast, and the fit of the array
 │   ├── test_yesterday.py      # yesterday's figures
 │   ├── test_readme.py         # this file: the README against the code
-│   └── test_docker.py         # the container: image, compose, update script
+│   ├── test_docker.py         # the container: image, compose, update script
+│   └── test_phone_layout.py   # the phone layout, and the screens it must not touch
 ├── docs/                   # screenshots, release notes, the Docker and
 │                           # Portainer guides
 ├── Dockerfile              # the container image
@@ -955,7 +1004,7 @@ foxess-dashboard/
 python3 -m unittest discover -s tests -v
 ```
 
-471 tests covering the plain parts — unit conversion (W → kW, kW passthrough),
+485 tests covering the plain parts — unit conversion (W → kW, kW passthrough),
 charge/discharge direction, grid import vs export, the device-level timestamp
 quirk of the v1 real/query endpoint, the Open API signature, secret masking
 and file permissions.
@@ -978,6 +1027,11 @@ that would only show up on the Pi: that the timezone database is in the image,
 that the container does not run as root, that the settings file is mounted in
 and never baked in, and that an update which breaks the container puts the
 old one back.
+
+The phone layout is checked for the same reason: its media query must not be
+able to match the Pi, the small LCDs, the ESP32 or the narrow panel; the
+swipe code must not have been touched to make room for it; and the diagram,
+which a phone drops, must not creep back in.
 
 The font and the ESP32 renderer are verified visually — `test_font.py` prints
 every glyph as ASCII art, and `test_esp32_render.py` renders the ESP32 screen

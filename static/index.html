@@ -157,6 +157,8 @@ h1 .sub{color:var(--dim);font-weight:400;font-size:var(--fsl);margin-left:.5em}
 .tile .v small{font-size:.45em;color:var(--dim);font-weight:500;margin-left:.2em}
 .tile .note{color:var(--dim);font-size:var(--fsl);margin-top:.1em;
             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* the live figures sit under the battery ring, with a little air */
+.side .tiles{margin-top:var(--gap)}
 /* The same figure, one day back.  It is there to be read against the
    number above it, so it is kept small and quiet rather than competing
    with it.  The word and the number are on separate lines, so that the
@@ -718,6 +720,111 @@ body .dash[data-slide="weather"]{
 .wday .wd{font-size:var(--fsl);color:var(--dim);white-space:nowrap;overflow:hidden;
           text-overflow:ellipsis;max-width:100%;line-height:1.15}
 
+/* ---- a phone, held in a hand -------------------------------------------
+   A phone is narrow and tall, and it is not screwed to a wall, so it is
+   allowed to scroll: the "one screen, no scrolling" rule is for the fixed
+   panels.  The diagram goes, because the drawing is 900 units wide and at
+   this width its own type comes out at about eleven pixels.  The battery
+   ring and the live figures are what the phone is for.
+
+   The sideways swipe still turns the deck.  The browser is given the
+   vertical pan and keeps its hands off the horizontal one, so a drag that
+   is mostly sideways is still ours to read.
+   -------------------------------------------------------------------- */
+@media (max-width:560px) and (min-height:600px){
+  :root{--fs:15px;--fsl:12px;--fsb:26px}
+
+  /* the browser may scroll the slide vertically; the horizontal drag is
+     the deck's, because pan-y leaves it to us */
+  body{touch-action:pan-y}
+  .stage{overflow-y:auto;overflow-x:hidden;touch-action:pan-y;
+         overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+
+  /* the slide grows with its content, and the stage does the scrolling.
+     It is a column of panels rather than a grid: a grid row cannot size
+     itself to a panel's content when the panel is allowed to shrink, and
+     a panel that shrinks clips its own last row. */
+  .stage{grid-template-rows:auto}
+  .dash{display:flex;flex-direction:column;gap:var(--gap);min-height:100%}
+  .dash>.panel{flex:none}
+  body .dash[data-slide="power"] .side{order:1}
+  body .dash[data-slide="power"] .totals{order:2}
+  body .dash[data-slide="usage"] .usage{order:1}
+  body .dash[data-slide="usage"] .octopus{order:2}
+  body .dash[data-slide="usage"] .today{order:3}
+  body .dash[data-slide="weather"] .now{order:1}
+  body .dash[data-slide="weather"] .sun{order:2}
+  body .dash[data-slide="weather"] .week{order:3}
+
+  body .dash[data-slide="power"]{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto;
+    grid-template-areas:"side" "totals";
+  }
+  body .dash[data-slide="usage"]{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto auto;
+    grid-template-areas:"usage" "octopus" "today";
+  }
+  body .dash[data-slide="weather"]{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto auto;
+    grid-template-areas:"now" "sun" "week";
+  }
+
+  /* the Live panel: the battery ring beside the four live figures */
+  .side{
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr);
+    grid-template-areas:"head head" "gauge tiles" "hint hint";
+    gap:var(--gap);
+    align-items:center;
+  }
+  .side>h2{grid-area:head;margin:0}
+  .gauge{grid-area:gauge;display:flex;flex-direction:column;
+         align-items:center;gap:.2em}
+  .gauge svg{height:104px}
+  .gauge .big{font-size:26px}
+  .side .tiles{grid-area:tiles;grid-template-columns:repeat(2,minmax(0,1fr));
+               margin-top:0}
+  /* the ring says the level, so the tile that says it again goes */
+  .side .tile.soc{display:none}
+  .side .socbar{display:none}
+  /* the self-sufficiency line is worth keeping: it says how much of the
+     sun's own power is being used */
+  .side .flowhint.tiny-only{grid-area:hint;display:block;text-align:left;
+                            white-space:normal;margin-top:.2em}
+
+  /* today's figures, the Octopus figures and the solar forecast are back:
+     they were dropped for the tiny screens, and a phone has room for them */
+  .totals{display:flex}
+  .totals .scroll{overflow:visible;mask-image:none;-webkit-mask-image:none}
+  body .dash[data-slide="usage"] .octopus,
+  body .dash[data-slide="usage"] .today{display:flex}
+  body .dash[data-slide="weather"] .sun{display:flex}
+  /* the chart gets a box of its own rather than whatever is left over:
+     a panel that flexes to fill a space whose size depends on the panel
+     ends up a pixel or two short, and it clips its own last row */
+  .chartbox{flex:none;height:170px;min-height:170px}
+  /* the legend is one long row, and on a phone the last label runs off
+     the edge - so it wraps instead */
+  .legend{flex-wrap:wrap;white-space:normal}
+  .legend span{white-space:nowrap}
+  /* these are written as the rules they have to beat: the usage slide
+     puts today's tiles in six columns on a narrow screen, and six
+     columns of "9,999.99 kWh" is a number with its end cut off.
+     The tiles also stop filling the panel: on a phone the panel is as
+     tall as its content, and a tile that fills a panel whose height
+     depends on the tile ends up clipping its own last row. */
+  body .dash[data-slide="usage"] .today .tiles{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    flex:none}
+  .octopus .tiles{grid-template-columns:repeat(2,minmax(0,1fr));flex:none}
+  .week .days{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .octopus .tiles .tile .v,
+  .today .tiles .tile .v{font-size:22px}
+}
+
 </style>
 </head>
 <body>
@@ -904,7 +1011,7 @@ body .dash[data-slide="weather"]{
           <div class="cap" id="socCap">waiting…</div>
         </div>
       </div>
-      <div class="tiles" id="tiles" style="margin-top:var(--gap)"></div>
+      <div class="tiles" id="tiles"></div>
       <div class="socbar" id="socBar">
         <div class="fill" id="socFill"></div>
         <div class="floor" id="socFloorBar"></div>

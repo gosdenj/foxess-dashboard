@@ -47,27 +47,62 @@ td.k{font-family:var(--font-ui);color:var(--text)}
 <main>
   <h1>FoxESS on a phone</h1>
   <p class="lede">
-    Mock-ups of the three slides at phone sizes, with the layout proposals
-    that produced them. The photographs are of the real dashboard with the
-    real data pipeline — the demo, fed the longest values the display ever
-    shows — with a stylesheet injected at render time. Nothing in the
-    shipped code was changed to make them.
+    The three slides at phone sizes: what a phone gets now, and the layout
+    proposals that led to it. The photographs are of the real dashboard with
+    the real data pipeline — the demo, fed the longest values the display ever
+    shows. The proposal photographs have a stylesheet injected at render time;
+    the shipped ones are the page itself, with nothing added.
   </p>
   <p class="note">
-    Open a photograph for the full size. The write-up, with the measurements
-    and the risks, is in <a href="../MOBILE.md">docs/MOBILE.md</a>.
+    Open a photograph for the full size. These are the key ones; every
+    candidate was photographed at three sizes, and the whole set is in this
+    folder. The write-up, with the measurements and the risks, is in
+    <a href="../MOBILE.md">docs/MOBILE.md</a>.
   </p>
 
-  <h2>Today — what a phone gets now</h2>
+  <h2>Shipped — what a phone gets now</h2>
   <div class="card">
-    <h3>The phone inherits the tiny-LCD layout</h3>
+    <h3>Option A, as it ships</h3>
     <p>
-      A phone is narrower than 560&nbsp;px, so it falls through to the same
+      The battery ring and the live figures at the top, then the rest of the
+      slide underneath, and the slide scrolls. The sideways swipe still turns
+      the deck: the browser is given the vertical pan and keeps its hands off
+      the horizontal one. The figures are 26&nbsp;px rather than the
+      LCD's 17&nbsp;px, because a phone is read at arm's length.
+    </p>
+    <p>
+      These three photographs are of the shipped page — the real stylesheet,
+      the real data pipeline, the longest values the display ever shows —
+      with nothing injected at render time.
+    </p>
+    <p><span class="pill">body 15 px</span><span class="pill">figures 26 px</span>
+       <span class="pill">diagram: no</span><span class="pill">scrolls: yes</span>
+       <span class="pill">swipe: yes</span></p>
+  </div>
+  <div class="shots">
+    <figure><img src="mobile-shipped-power-phone-390x844.png" alt="The shipped phone layout, power slide">
+      <figcaption>power · 390×844</figcaption></figure>
+    <figure><img src="mobile-shipped-usage-phone-390x844.png" alt="The shipped phone layout, usage slide">
+      <figcaption>usage · 390×844</figcaption></figure>
+    <figure><img src="mobile-shipped-weather-phone-390x844.png" alt="The shipped phone layout, weather slide">
+      <figcaption>weather · 390×844</figcaption></figure>
+  </div>
+
+  <h2>Before — what a phone used to get</h2>
+  <div class="card">
+    <h3>The phone inherited the tiny-LCD layout</h3>
+    <p>
+      A phone is narrower than 560&nbsp;px, so it fell through to the same
       breakpoint as a 3.5&nbsp;inch LCD: the diagram is dropped, today's
       figures are dropped, and the five live numbers are left in a 3&nbsp;+&nbsp;2
       grid with a great deal of empty screen around them. The type is the
       LCD's type — 13&nbsp;px body, 17&nbsp;px figures — on a screen that is
       held in a hand rather than screwed to a wall.
+    </p>
+    <p class="note">
+      These three are kept as the record of what it was. They cannot be
+      re-rendered from the current code, because the code that drew them has
+      changed.
     </p>
   </div>
   <div class="shots">
@@ -93,6 +128,13 @@ td.k{font-family:var(--font-ui);color:var(--text)}
     </p>
     <p><span class="pill">body 15 px</span><span class="pill">figures 26 px</span>
        <span class="pill">diagram: no</span><span class="pill">scrolls: yes</span></p>
+    <p class="note">
+      This is the option that was taken. The photographs below are the
+      proposal as it was drawn; the shipped layout is at the top of this
+      page, and it is the same idea with three things the mock-up could not
+      show — the panels are a column rather than a grid, the tiles are two
+      columns rather than six, and the chart legend wraps.
+    </p>
   </div>
   <div class="shots">
     <figure><img src="mobile-a-power-phone-390x844.png" alt="Candidate A, power slide">
@@ -116,8 +158,16 @@ td.k{font-family:var(--font-ui);color:var(--text)}
     </p>
     <p><span class="pill">body 14 px</span><span class="pill">figures 22 px</span>
        <span class="pill">diagram: yes, 14 px</span><span class="pill">scrolls: no</span></p>
+    <p class="note">
+      The shipped work deliberately leaves landscape alone: the phone's media
+      query asks for a narrow screen <em>and</em> a tall one, so a phone
+      turned sideways still gets the old small-screen layout — the third
+      photograph below, which is of the shipped page.
+    </p>
   </div>
   <div class="shots">
+    <figure><img src="mobile-shipped-power-phone-landscape-844x390.png" alt="The shipped page, phone in landscape">
+      <figcaption>shipped, landscape · 844×390</figcaption></figure>
     <figure><img src="mobile-b-power-phone-landscape-844x390.png" alt="Candidate B, power slide">
       <figcaption>power · 844×390</figcaption></figure>
     <figure><img src="mobile-b-usage-phone-landscape-844x390.png" alt="Candidate B, usage slide">

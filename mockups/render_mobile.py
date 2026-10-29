@@ -42,10 +42,13 @@ VIEWPORTS = [
 
 SLIDES = ["power", "usage", "weather"]
 
-#: The candidates: the first is what happens today, the others are the
-#: proposals.
+#: The candidates: the first is the real page, the others are the proposals
+#: that were drawn before the layout was written into ``static/index.html``.
+#: The photographs of the old, pre-phone layout are kept as the record of
+#: what a phone used to get; they cannot be re-rendered, because the code
+#: that drew them has changed.
 CANDIDATES = [
-    ("today", None, "What a phone gets today"),
+    ("shipped", None, "What a phone gets now - the shipped layout"),
     ("a", "mobile.css", "A - portrait, the numbers are the hero"),
     ("b", "mobile.css", "B - landscape, laid out like the Pi"),
     ("c", "mobile.css", "C - portrait, with the diagram kept"),
@@ -202,7 +205,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", default="8808")
     ap.add_argument("--out", default=os.path.join(ROOT, "docs", "mockups"))
-    ap.add_argument("--only", default="", help="one candidate letter, or 'today'")
+    ap.add_argument("--only", default="", help="one candidate letter, or 'shipped'")
     args = ap.parse_args()
     port = int(args.port)
     url = f"http://127.0.0.1:{port}/"
@@ -247,8 +250,11 @@ def main() -> int:
                         page.wait_for_timeout(500)
                     m = page.evaluate(MEASURE)
                     name = f"mobile-{letter}-{slide}-{size_name}.png"
+                    # The phone scrolls, so the whole slide is worth
+                    # photographing: a viewport-only picture would show the
+                    # top of it and nothing else.
                     page.screenshot(path=os.path.join(out, name),
-                                    full_page=(letter == "a"))
+                                    full_page=(letter in ("shipped", "a")))
                     rows.append({"candidate": letter, "size": size_name,
                                  "slide": slide, "file": name,
                                  "caption": caption, **m,
@@ -266,8 +272,20 @@ def main() -> int:
     # Put the rotation back the way it was.
     set_settings(port, {"display.slide_interval": 20})
 
-    with open(os.path.join(out, "measurements.json"), "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2)
+    # The measurements of every candidate live in one file.  When only some
+    # of them have been re-rendered, the others are kept rather than lost.
+    measured = os.path.join(out, "measurements.json")
+    rows_all = []
+    if os.path.exists(measured):
+        try:
+            with open(measured, encoding="utf-8") as fh:
+                rows_all = json.load(fh)
+        except (OSError, ValueError):
+            rows_all = []
+    drawn = {r["candidate"] for r in rows}
+    rows_all = [r for r in rows_all if r["candidate"] not in drawn] + rows
+    with open(measured, "w", encoding="utf-8") as fh:
+        json.dump(rows_all, fh, indent=2)
     print(f"\n{len(rows)} photographs written to {out}")
     return 0
 

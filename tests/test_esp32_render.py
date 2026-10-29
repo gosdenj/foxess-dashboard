@@ -58,14 +58,14 @@ DAY = {
     "live": {"pvPower": 4.12, "loadsPower": 1.56, "gridConsumptionPower": 0.0,
              "feedinPower": 0.61, "batChargePower": 2.51,
              "batDischargePower": 0.0, "SoC": 88.0},
-    "meta": {"plant_name": "PO4 - Gosden", "min_soc": 10},
+    "meta": {"plant_name": "Example Plant", "min_soc": 10},
 }
 EVENING = {
     "connected": True, "live_age_s": 0.8,
     "live": {"pvPower": 0.0, "loadsPower": 2.98, "gridConsumptionPower": 2.98,
              "feedinPower": 0.0, "batChargePower": 0.0,
              "batDischargePower": 0.0, "SoC": 10.0},
-    "meta": {"plant_name": "PO4 - Gosden", "min_soc": 10},
+    "meta": {"plant_name": "Example Plant", "min_soc": 10},
 }
 OFFLINE = None
 
