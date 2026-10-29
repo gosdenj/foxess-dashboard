@@ -86,9 +86,10 @@ drawing legible at that width; it has to be drawn for the width.
 
 **A — portrait, the numbers are the hero.** The Live panel is the hero:
 the battery ring on the left, the four live figures in a two-up grid
-beside it, today's figures as a table underneath. The usage slide keeps
-the chart, the Octopus figures and today's tiles; the weather slide keeps
-the conditions, the solar forecast and the week. The page scrolls.
+beside it, today's figures as a table underneath, and the System panel
+below that. The usage slide keeps the chart, the Octopus figures and
+today's tiles; the weather slide keeps the conditions, the solar forecast
+and the week. The page scrolls.
 
 - **Touches:** the root overflow and `touch-action`, and the gesture
   arbitration — a vertical drag has to reach the browser without the
@@ -180,6 +181,69 @@ geometry identical: 21/27
 
 Not one pixel of the Pi, the desktop, the laptop, the tablet, the small
 LCD, the ESP32 or the narrow panel moved.
+
+## Filling the empty screen
+
+The first version of the phone layout left more than half the screen empty.
+It was not a bug and it was not an oversight of the layout — it was what the
+layout asked for. The power slide was 376 px of content in an 811 px
+screen: 435 px of nothing on an iPhone 13, 523 px on a large one. The
+reader was given a quarter of a phone to read four numbers in.
+
+A phone is a display medium like any other, and the point of a display
+medium is to say as much as it can. So the space was filled with the two
+things the phone was missing and the Pi has never been without.
+
+**The System panel.** It is the one panel the phone dropped and the Pi
+keeps: the firmware, the battery units, the minimum state of charge, the
+signal, the API quota. The phone could say the battery was at 83% and
+nothing whatever about the thing that holds the battery.
+
+Two rules hide it — "the layout is automatic" and "the screen is small" —
+and neither is true of a phone, so the phone band asks for it back. The
+request is written with `:where()`:
+
+```css
+body:where(:not(.no-system)):where(:not([data-layout="compact"])):where(:not([data-layout="tiny"]))
+    .dash[data-slide="power"] .panel.system{display:flex}
+```
+
+`:where()` adds no specificity of its own, which is exactly what is wanted:
+"no system", "compact" and "tiny" are decisions the user has made, and they
+keep their own cases. A phone cannot override a decision.
+
+**The state words.** The live tiles already carry a word — "generating",
+"consuming", "importing", "discharging", "charging", "idle" — and the
+small-screen rules hide it, because on the Pi the rings diagram says the
+same thing. A phone has no diagram, so the words go under the figures
+instead:
+
+```
+Solar          Grid            Batt
+  5.19 kW     -1.02 kW        -3.00 kW
+generating    exporting       charging
+```
+
+**Idle is the state most worth knowing about**, and idle is exactly the
+state a bare number cannot express.
+
+**The ring and the rows.** The battery ring goes from 104 px to 120 px, and
+no further: it sits *beside* the figures, so every pixel of it is a pixel
+taken from them, and at 150 px the widest value ("-12.34 kW") no longer
+fits in a tile at 360 px wide. Today's rows go from 25 px to 31 px, with
+the type from 12 px to 13 px, because a phone is read at arm's length.
+
+The result, measured:
+
+| | before | after |
+|---|---|---|
+| the Live panel | 175 px | 218 px |
+| the Today panel | 191 px | 223 px |
+| the System panel | *dropped* | 343 px |
+| **the content in all** | **376 px** | **804 px** |
+
+An iPhone 13 now fits the power slide in 811 px with 7 px to spare; a
+phone with the browser's own bars on it scrolls, which it is allowed to do.
 
 ## The two options that were not taken
 

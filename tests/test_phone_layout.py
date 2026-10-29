@@ -138,6 +138,85 @@ class TestThePhoneLayout(unittest.TestCase):
         self.assertIn("stage.scrollTop = 0", _read())
 
 
+class TestTheSpareHeight(unittest.TestCase):
+
+    """What fills the space under the figures on a phone.
+
+    The phone's power slide has a lot of room below it - on an iPhone 13
+    it is more than half a screen.  Rather than leave it empty, the phone
+    takes back the two things it was missing: the System panel, which the
+    Pi has and the phone dropped, and the state words, which the diagram
+    used to say and the phone has no diagram to say them in.
+    """
+
+    def setUp(self) -> None:
+        self.block = _phone_block()
+
+    def test_the_system_panel_comes_back(self):
+        """It is the one panel the phone dropped and the Pi keeps.
+
+        It is what says whether the machine is well: the firmware, the
+        battery units, the minimum state of charge, the signal.  Without
+        it the phone cannot tell a healthy inverter from a sick one.
+        """
+        self.assertIn(".panel.system{display:flex}", self.block)
+
+    def test_the_system_panel_is_asked_for_by_name(self):
+        """It is the power slide's panel; the other slides have their own."""
+        self.assertIn('[data-slide="power"]', self.block)
+
+    def test_an_explicit_choice_still_wins(self):
+        """A phone cannot override a decision the user has made.
+
+        The rules that hide the System panel are "the layout is automatic"
+        and "the screen is small", and neither is true of a phone.  But
+        "no system", "compact" and "tiny" are decisions, so they keep
+        their own cases - which is why the guards are written with
+        :where(): it adds no specificity of its own, so the rules it
+        guards still win where they apply.
+        """
+        self.assertIn(":where(:not(.no-system))", self.block)
+        self.assertIn(':where(:not([data-layout="compact"]))', self.block)
+        self.assertIn(':where(:not([data-layout="tiny"]))', self.block)
+
+    def test_the_system_table_is_not_scrolled(self):
+        """It is short enough to show in full, and the fade at the bottom
+        of a scroll would hide its last row."""
+        self.assertIn(".system .scroll", self.block)
+        self.assertRegex(self.block, r"\.system \.scroll\{[^}]*overflow:visible")
+
+    def test_the_state_words_are_shown(self):
+        """They are what the diagram used to say.
+
+        The tiles carry a note - "generating", "consuming", "importing",
+        "discharging" - and the small screens hide it.  A phone has no
+        diagram, so without the words it cannot say whether the machine
+        is running or idle, and idle is the state most worth knowing.
+        """
+        self.assertRegex(self.block, r"\.side \.tile \.note\{display:block")
+
+    def test_the_state_words_are_the_live_ones(self):
+        """Only the Live panel's tiles carry a state; the other panels'
+        tiles are counters, and a counter has no state."""
+        self.assertIn(".side .tile", self.block)
+
+    def test_the_gauge_is_grown(self):
+        """The ring is the hero of the phone's power slide."""
+        self.assertIn(".gauge svg{height:120px}", self.block)
+
+    def test_the_gauge_is_not_grown_too_far(self):
+        """The ring sits beside the figures, so every pixel of it is a
+        pixel taken from them.  At 150px the widest value ("-12.34 kW")
+        no longer fits in a tile at 360px wide, and a figure with its end
+        cut off is worse than a smaller ring."""
+        self.assertNotIn(".gauge svg{height:150px}", self.block)
+
+    def test_the_todays_rows_are_taller(self):
+        """Today's figures are read at arm's length."""
+        self.assertIn(".totals table{font-size:13px}", self.block)
+        self.assertRegex(self.block, r"\.totals td\{padding:\.\d+em 0\}")
+
+
 class TestTheGesture(unittest.TestCase):
 
     """The swipe that turns the deck is shared with the kiosk, so it must

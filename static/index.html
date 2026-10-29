@@ -756,6 +756,7 @@ body .dash[data-slide="weather"]{
   .dash>.panel{flex:none}
   body .dash[data-slide="power"] .side{order:1}
   body .dash[data-slide="power"] .totals{order:2}
+  body .dash[data-slide="power"] .system{order:3}
   body .dash[data-slide="usage"] .usage{order:1}
   body .dash[data-slide="usage"] .octopus{order:2}
   body .dash[data-slide="usage"] .today{order:3}
@@ -765,9 +766,22 @@ body .dash[data-slide="weather"]{
 
   body .dash[data-slide="power"]{
     grid-template-columns:minmax(0,1fr);
-    grid-template-rows:auto auto;
-    grid-template-areas:"side" "totals";
+    grid-template-rows:auto auto auto;
+    grid-template-areas:"side" "totals" "sys";
   }
+  /* The System panel comes back.  It is the one panel the phone dropped
+     and the Pi keeps, and it is what says whether the machine is well:
+     the firmware, the battery units, the minimum state of charge, the
+     signal.  On the phone there was nothing at all to say any of that.
+
+     The rules that hide it are "the layout is automatic" and "the screen
+     is small", and on a phone neither of those is true: the layout is
+     the phone's own, and the screen is allowed to scroll.  An explicit
+     choice still wins - no system, compact, tiny - which is why the
+     guards are written with :where(): they add no specificity of their
+     own, so the rules they guard stay in charge of their own cases. */
+  body:where(:not(.no-system)):where(:not([data-layout="compact"])):where(:not([data-layout="tiny"]))
+      .dash[data-slide="power"] .panel.system{display:flex}
   body .dash[data-slide="usage"]{
     grid-template-columns:minmax(0,1fr);
     grid-template-rows:auto auto auto;
@@ -790,13 +804,23 @@ body .dash[data-slide="weather"]{
   .side>h2{grid-area:head;margin:0}
   .gauge{grid-area:gauge;display:flex;flex-direction:column;
          align-items:center;gap:.2em}
-  .gauge svg{height:104px}
+  /* 120px, and not a pixel more.  The ring sits beside the figures, so
+     every pixel of it is a pixel taken from them: at 150px the widest
+     value ("-12.34 kW") no longer fits in a tile at 360px wide, and a
+     figure with its end cut off is worse than a smaller ring. */
+  .gauge svg{height:120px}
   .gauge .big{font-size:26px}
   .side .tiles{grid-area:tiles;grid-template-columns:repeat(2,minmax(0,1fr));
                margin-top:0}
   /* the ring says the level, so the tile that says it again goes */
   .side .tile.soc{display:none}
   .side .socbar{display:none}
+  /* The state words are what the diagram used to say - "generating",
+     "consuming", "importing", "discharging".  A phone has no diagram,
+     so they go under the figures instead: without them the phone cannot
+     say whether the machine is running or idle, and idle is the state
+     most worth knowing about. */
+  .side .tile .note{display:block;font-size:13px;margin-top:.25em}
   /* the self-sufficiency line is worth keeping: it says how much of the
      sun's own power is being used */
   .side .flowhint.tiny-only{grid-area:hint;display:block;text-align:left;
@@ -805,7 +829,17 @@ body .dash[data-slide="weather"]{
   /* today's figures, the Octopus figures and the solar forecast are back:
      they were dropped for the tiny screens, and a phone has room for them */
   .totals{display:flex}
-  .totals .scroll{overflow:visible;mask-image:none;-webkit-mask-image:none}
+  /* the table is not scrolled on a phone: it is short enough to show in
+     full, and the fade at the bottom of a scroll would hide its last
+     row */
+  .totals .scroll,.system .scroll{overflow:visible;mask-image:none;
+                                   -webkit-mask-image:none}
+  /* Today's figures are read at arm's length, so the rows are taller and
+     the numbers a little larger than on the panel on the wall.  A row
+     wants to be about 31px: tall enough to read without a pinch, short
+     enough that all six of them still fit above the fold. */
+  .totals table{font-size:13px}
+  .totals td{padding:.45em 0}
   body .dash[data-slide="usage"] .octopus,
   body .dash[data-slide="usage"] .today{display:flex}
   body .dash[data-slide="weather"] .sun{display:flex}

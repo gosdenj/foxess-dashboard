@@ -731,11 +731,19 @@ so.
 
 | | what the phone gets |
 |---|---|
-| **Power** | the battery ring beside the four live figures, today's figures as a table underneath |
+| **Power** | the battery ring beside the four live figures, today's figures as a table underneath, and the System panel below that |
 | **Usage** | the chart, the Octopus figures and today's tiles |
 | **Weather** | the conditions, the solar forecast and the week |
 | **The diagram** | dropped — its own type comes out at 11 px at this width |
 | **Type** | body 14 px, figures 26 px |
+
+**The phone says what the diagram used to say.** Each live figure carries a
+word under it — "generating", "importing", "discharging" — because the
+diagram that used to carry those words is not there. And the **System
+panel** is the one panel the phone dropped and the Pi keeps: the firmware,
+the battery units, the minimum state of charge, the signal. An explicit
+choice still wins — a phone cannot bring back a panel the user has turned
+off.
 
 **A phone may scroll.** The "one screen, no scrolling" rule above is for panels
 that are screwed to a wall. A phone is held in a hand, so the slide is as tall

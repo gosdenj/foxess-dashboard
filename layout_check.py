@@ -196,7 +196,7 @@ with sync_playwright() as p:
           }""")
           page.wait_for_timeout(250)
 
-          m = page.evaluate("""() => {
+          m = page.evaluate(r"""() => {
               const d = document.documentElement;
               const b = document.body;
               const vis = sel => {
@@ -270,6 +270,36 @@ with sync_playwright() as p:
                   })(),
                   touchAction: getComputedStyle(b).touchAction,
                   flow: vis(".flowsvg"),
+                  // The System panel comes back on a phone: it is what
+                  // says whether the machine is well.  "There" is not
+                  // "on screen" - a phone scrolls, so the panel is often
+                  // below the fold - but it must not be hidden.
+                  sysPanel: (() => {
+                      const el = document.querySelector(".system");
+                      if (!el) return false;
+                      const r = el.getBoundingClientRect();
+                      return getComputedStyle(el).display !== "none" &&
+                             r.width > 0 && r.height > 0;
+                  })(),
+                  // ...and the state words come back with it, because they
+                  // are what the diagram used to say: "generating",
+                  // "importing", "discharging".  A word that is there but
+                  // empty says nothing, so the text has to be in it too.
+                  notesShown: (() => {
+                      const notes = [...document.querySelectorAll(
+                          ".side .tile:not(.soc) .note")];
+                      return notes.length > 0 && notes.every(n => {
+                          const r = n.getBoundingClientRect();
+                          return r.width > 0 && r.height > 0 &&
+                                 n.textContent.trim() !== "";
+                      });
+                  })(),
+                  // Today's rows are read at arm's length, so they are
+                  // taller than the rows on a panel on the wall.
+                  todayRow: (() => {
+                      const r = document.querySelector("#daily tbody tr");
+                      return r ? r.getBoundingClientRect().height : 0;
+                  })(),
                   // the battery level may be in the panel or in the diagram
                   // the battery level, wherever it is shown
                   soc: (vis("#socArc") || vis("#socBar")
@@ -284,6 +314,7 @@ with sync_playwright() as p:
                       heading: px(".panel h2"),
                       tileLabel: px(".tile .k"),
                       tileValue: px(".tile .v"),
+                      tileNote: px(".side .tile .note"),
                       svgLabel: Math.max(svgH(".flowsvg .lbl"), svgH(".ringsvg .rname")),
                       svgValue: Math.max(svgH(".flowsvg .val"), svgH(".ringsvg .rval")),
                       // the weather slide has its own figures
@@ -383,6 +414,8 @@ with sync_playwright() as p:
               "heading": 11.0 if phone else 10.0,
               "tileLabel": 11.0 if phone else 9.5,
               "tileValue": 20.0 if phone else 15.0,
+              # the state word under a figure is read at arm's length too
+              "tileNote": 12.0 if phone else 0.0,
               "svgLabel": 8.0,
               "svgValue": 14.0,
               "weatherValue": 22.0 if phone else 20.0,
@@ -402,6 +435,10 @@ with sync_playwright() as p:
           if slide == "weather":
               tooSmall = {k: v for k, v in tooSmall.items()
                           if not k.startswith("tile")}
+          # Today's rows are read at arm's length, so they are taller than
+          # the rows on a panel on the wall.
+          if phone and slide == "power" and m["todayRow"] < 28:
+              tooSmall["todayRow"] = (round(m["todayRow"], 1), 28)
 
           # The power slide is the one with the live tiles and the battery
           # gauge. The other slides have their own panels.
@@ -422,6 +459,12 @@ with sync_playwright() as p:
                          # can do about it.
                          and m["dashClipped"] <= 1
                          and m["dashReach"] >= -1)
+          # On a phone the System panel comes back, and the state words
+          # come back with it: they are what the diagram used to say, and
+          # a phone has no diagram to say it in.
+          phoneExtras = True
+          if phone and power:
+              phoneExtras = m["sysPanel"] and m["notesShown"]
           ok = (vscroll <= 0 and hscroll <= 0
                 and (m["soc"] or not power)
                 # four on a big screen (the SoC tile is folded into the
@@ -429,6 +472,7 @@ with sync_playwright() as p:
                 and (len(m["tiles"]) >= 4 or not power)
                 and tilesOk
                 and scrollsOk
+                and phoneExtras
                 and not m["anyTruncated"] and not tooSmall
                 and not m["clippedPanels"] and not m["clippedCards"]
                 and not m["ringText"])
@@ -441,7 +485,9 @@ with sync_playwright() as p:
                 + (f"  CLIPPED:{','.join(m['clippedPanels'])}" if m["clippedPanels"] else "")
                 + (f"  CARD:{','.join(m['clippedCards'])}" if m["clippedCards"] else "")
                 + (f"  SLIDE-CLIPPED:{m['dashClipped']}" if phone and m["dashClipped"] > 1 else "")
-                + (f"  UNREACHABLE:{-m['dashReach']}" if phone and m["dashReach"] < -1 else ""))
+                + (f"  UNREACHABLE:{-m['dashReach']}" if phone and m["dashReach"] < -1 else "")
+                + (f"  NO-SYSTEM" if phone and power and not m['sysPanel'] else "")
+                + (f"  NO-WORDS" if phone and power and not m['notesShown'] else ""))
           if m["clippedPanels"]:
               print(f"       clipped inside: {', '.join(m['clippedPanels'])}")
           if m["clippedCards"]:
@@ -456,6 +502,8 @@ with sync_playwright() as p:
                   print("       detail: tiles off screen")
               if m["anyTruncated"]:
                   print("       detail: values truncated")
+              if not phoneExtras:
+                  print("       detail: the System panel or the state words are missing")
               for tt in m["tiles"]:
                   if tt["truncated"] or tt["labelCut"]:
                       print(f"       truncated: {tt['k']}")
