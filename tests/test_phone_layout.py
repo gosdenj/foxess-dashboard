@@ -109,6 +109,26 @@ class TestThePhoneLayout(unittest.TestCase):
         """A panel that shrinks clips its own last row."""
         self.assertIn(".dash>.panel{flex:none}", self.block)
 
+    def test_the_slide_is_not_a_grid_item(self):
+        """The slide has to be as tall as its content.
+
+        A grid hands its items a definite height, so a slide that is a grid
+        item is given the height of the stage - and the rest of it is
+        clipped by its own ``overflow:hidden``.  Clipped is not the same
+        as scrollable: the content is gone, and there is nothing the reader
+        can do about it.  So on a phone the stage is a plain block, the
+        slide grows with its content, and the stage does the scrolling.
+        """
+        self.assertIn(".stage{display:block}", self.block)
+
+    def test_the_stage_is_not_left_as_a_grid(self):
+        """A grid is what gave the slide a height it could not keep."""
+        self.assertNotIn(".stage{display:grid", self.block)
+
+    def test_the_slide_still_covers_the_screen_when_it_is_short(self):
+        """A slide with little in it still fills the screen."""
+        self.assertIn("min-height:100%", self.block)
+
 
 class TestTheGesture(unittest.TestCase):
 

@@ -249,6 +249,25 @@ with sync_playwright() as p:
                       const s = document.querySelector('.stage');
                       return s ? getComputedStyle(s).overflowY : '';
                   })(),
+                  // The slide must not clip its own content.  On a phone
+                  // the stage scrolls, so a slide that is taller than the
+                  // screen is fine - but a slide that is *shorter* than
+                  // its content is not, and there is nothing the reader
+                  // can do about it: the content is simply gone.
+                  dashClipped: (() => {
+                      const d = document.querySelector('.dash:not(.ghost)');
+                      if (!d) return 0;
+                      return d.scrollHeight - d.clientHeight;
+                  })(),
+                  // ...and everything in it has to be reachable by
+                  // scrolling the stage.
+                  dashReach: (() => {
+                      const s = document.querySelector('.stage');
+                      const d = document.querySelector('.dash:not(.ghost)');
+                      if (!s || !d) return 0;
+                      return s.scrollHeight - Math.round(
+                          d.getBoundingClientRect().height);
+                  })(),
                   touchAction: getComputedStyle(b).touchAction,
                   flow: vis(".flowsvg"),
                   // the battery level may be in the panel or in the diagram
@@ -395,7 +414,14 @@ with sync_playwright() as p:
           if phone:
             scrollsOk = (m["stageOverflow"] == "auto"
                          and m["touchAction"] == "pan-y"
-                         and m["stageScroll"] >= 0)
+                         and m["stageScroll"] >= 0
+                         # The slide must not clip its own content, and
+                         # what is below the fold has to be reachable by
+                         # scrolling the stage - otherwise the content is
+                         # simply lost, and there is nothing the reader
+                         # can do about it.
+                         and m["dashClipped"] <= 1
+                         and m["dashReach"] >= -1)
           ok = (vscroll <= 0 and hscroll <= 0
                 and (m["soc"] or not power)
                 # four on a big screen (the SoC tile is folded into the
@@ -413,7 +439,9 @@ with sync_playwright() as p:
                 f"lbl {t['tileLabel']:.0f} val {t['tileValue']:.0f} "
                 f"svg {t['svgLabel']:.0f}/{t['svgValue']:.0f}]"
                 + (f"  CLIPPED:{','.join(m['clippedPanels'])}" if m["clippedPanels"] else "")
-                + (f"  CARD:{','.join(m['clippedCards'])}" if m["clippedCards"] else ""))
+                + (f"  CARD:{','.join(m['clippedCards'])}" if m["clippedCards"] else "")
+                + (f"  SLIDE-CLIPPED:{m['dashClipped']}" if phone and m["dashClipped"] > 1 else "")
+                + (f"  UNREACHABLE:{-m['dashReach']}" if phone and m["dashReach"] < -1 else ""))
           if m["clippedPanels"]:
               print(f"       clipped inside: {', '.join(m['clippedPanels'])}")
           if m["clippedCards"]:

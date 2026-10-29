@@ -132,6 +132,15 @@ Three things had to be got right, and each of them was got wrong first:
    narrow screen, and six columns of "9,999.99 kWh" is a number with its
    end cut off. On a phone they are two columns.
 
+A fourth thing was wrong as well, and it was found by using it: **the
+stage did not scroll.** The slide was a grid item of the stage, and a
+grid hands its items a definite height — so the slide was exactly as tall
+as the screen and everything below the fold was clipped by its own
+`overflow:hidden`. Clipped is not the same as scrollable: the content
+was gone, and the page sat still while the reader pushed on it. The
+stage is a plain block on a phone now, so the slide grows with its
+content and the stage scrolls it.
+
 The chart legend was also cut off at 390 px — one flex row with no wrap.
 On a phone it wraps; the smaller screens are left exactly as they were,
 because at 320 px there is no room for a second row either.
@@ -142,6 +151,16 @@ The layout guarantees — no scrolling, nothing truncated, type never below
 the floor — are checked by `layout_check.py`, which now knows about the
 phone and has **higher** floors for it (body 14 px, figures 20 px), because
 a phone is read closer than a panel on a wall.
+
+It also measures two things about the scroll itself, which it did not
+measure before, and which is how the stage was found not to be scrolling:
+
+- **`dashClipped`** — the slide must not be shorter than its own content.
+- **`dashReach`** — everything in the slide has to be reachable by
+  scrolling the stage.
+
+Against the layout as it first shipped, the first of those reports
+`SLIDE-CLIPPED:19` on the usage slide at 360×800, and the check fails.
 
 On top of that, the geometry of every existing display was measured before
 and after the change — the position, size and type size of every panel,

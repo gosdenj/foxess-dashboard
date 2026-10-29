@@ -743,8 +743,15 @@ body .dash[data-slide="weather"]{
   /* the slide grows with its content, and the stage does the scrolling.
      It is a column of panels rather than a grid: a grid row cannot size
      itself to a panel's content when the panel is allowed to shrink, and
-     a panel that shrinks clips its own last row. */
-  .stage{grid-template-rows:auto}
+     a panel that shrinks clips its own last row.
+
+     And the stage is a block rather than a grid, so that the slide is not
+     one of its grid items.  A grid hands its items a definite height, and
+     a slide with more in it than fits the screen would then be clipped by
+     its own overflow:hidden rather than pushed down the stage for the
+     reader to scroll to.  As a plain block the slide is as tall as it
+     needs to be, and the stage scrolls it. */
+  .stage{display:block}
   .dash{display:flex;flex-direction:column;gap:var(--gap);min-height:100%}
   .dash>.panel{flex:none}
   body .dash[data-slide="power"] .side{order:1}

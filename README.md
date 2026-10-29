@@ -738,8 +738,9 @@ so.
 | **Type** | body 14 px, figures 26 px |
 
 **A phone may scroll.** The "one screen, no scrolling" rule above is for panels
-that are screwed to a wall. A phone is held in a hand, so the slide is allowed
-to be taller than the viewport, and the stage scrolls it.
+that are screwed to a wall. A phone is held in a hand, so the slide is as tall
+as its content and the stage scrolls it — the bottom of it is reachable. Where
+the slide fits the screen there is nothing to scroll, and nothing missing.
 
 **The swipe still turns the deck.** The browser is given the vertical pan and
 keeps its hands off the horizontal one, so a sideways drag is still the
@@ -1004,7 +1005,7 @@ foxess-dashboard/
 python3 -m unittest discover -s tests -v
 ```
 
-485 tests covering the plain parts — unit conversion (W → kW, kW passthrough),
+488 tests covering the plain parts — unit conversion (W → kW, kW passthrough),
 charge/discharge direction, grid import vs export, the device-level timestamp
 quirk of the v1 real/query endpoint, the Open API signature, secret masking
 and file permissions.
