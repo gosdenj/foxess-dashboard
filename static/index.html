@@ -1434,6 +1434,11 @@ function applySlide(slide){
      is how it stays showing the old slide. */
   if(dash) dash.dataset.slide = slide.name;
 
+  /* A new slide starts at the top.  On a phone the last one may have
+     been scrolled down, and a slide that opens half way down is a slide
+     that has lost its beginning. */
+  if(stage) stage.scrollTop = 0;
+
   slideTransition(ghost, SWIPE_WAY);
   /* The direction has been used, so the next change of slide - the
      rotation's own - comes in from the right as usual. */

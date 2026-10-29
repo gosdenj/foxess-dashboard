@@ -129,6 +129,14 @@ class TestThePhoneLayout(unittest.TestCase):
         """A slide with little in it still fills the screen."""
         self.assertIn("min-height:100%", self.block)
 
+    def test_a_new_slide_starts_at_the_top(self):
+        """A slide that opens half way down has lost its beginning.
+
+        The reader may have scrolled the last slide down, and the next one
+        has to start where it really starts.
+        """
+        self.assertIn("stage.scrollTop = 0", _read())
+
 
 class TestTheGesture(unittest.TestCase):
 
