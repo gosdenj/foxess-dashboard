@@ -141,6 +141,12 @@ was gone, and the page sat still while the reader pushed on it. The
 stage is a plain block on a phone now, so the slide grows with its
 content and the stage scrolls it.
 
+And a fifth, which only a scrolling stage can have: **a new slide has
+to start at the top.** The reader scrolls the usage slide down to reach
+the figures at the bottom, swipes for the next one, and lands in the
+middle of it. So the stage is put back to the top when the slide
+changes.
+
 The chart legend was also cut off at 390 px — one flex row with no wrap.
 On a phone it wraps; the smaller screens are left exactly as they were,
 because at 320 px there is no room for a second row either.
