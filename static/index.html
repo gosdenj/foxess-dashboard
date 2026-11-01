@@ -967,23 +967,26 @@ body .dash[data-slide="weather"]{
         </svg>
         <svg class="flowsvg ringsvg" id="ringsSvg" viewBox="0 0 900 258" preserveAspectRatio="xMidYMid meet">
           <!-- The wires end on the hub's edge, so they are measured out to
-               its radius: 68 for the hub, 50 for the satellites. -->
-          <path id="rLinePv"   class="rwire moving" d="M183.93 68.31 Q290.0 78.3 383.45 110.05"  stroke="var(--pv)"/>
-          <path id="rLineLoad" class="rwire moving" d="M516.55 110.05 Q610.0 78.3 716.07 68.31"  stroke="var(--load)"/>
-          <path id="rLineGrid" class="rwire moving" d="M184.17 172.91 Q289.8 165.7 383.13 136.35" stroke="var(--grid)"/>
-          <path id="rLineBat"  class="rwire moving" d="M516.87 136.35 Q610.2 165.7 715.83 172.91" stroke="var(--bat)"/>
+               its radius: 78 for the hub, 50 for the satellites.  Growing
+               the hub means growing the wires' ends by the same amount,
+               and moving the control point with them, so that the wire
+               keeps its bow and meets the ring at the same angle. -->
+          <path id="rLinePv"   class="rwire moving" d="M183.93 68.31 Q280.21 76.25 373.66 108.00"  stroke="var(--pv)"/>
+          <path id="rLineLoad" class="rwire moving" d="M526.34 108.00 Q619.79 76.25 716.07 68.31"  stroke="var(--load)"/>
+          <path id="rLineGrid" class="rwire moving" d="M184.17 172.91 Q279.97 167.52 373.30 138.17" stroke="var(--grid)"/>
+          <path id="rLineBat"  class="rwire moving" d="M526.70 138.17 Q620.03 167.52 715.83 172.91" stroke="var(--bat)"/>
 
           <circle class="rnode" id="rRingPv"   cx="135" cy="58"  r="50" stroke="var(--pv)"/>
           <circle class="rnode" id="rRingLoad" cx="765" cy="58"  r="50" stroke="var(--load)"/>
           <circle class="rnode" id="rRingGrid" cx="135" cy="182" r="50" stroke="var(--grid)"/>
           <circle class="rnode" cx="765" cy="182" r="50" stroke="none"/>
-          <circle class="rnode" cx="450" cy="124" r="68" stroke="none"/>
+          <circle class="rnode" cx="450" cy="124" r="78" stroke="none"/>
           <circle class="rtrack" id="rTrackBat" cx="765" cy="182" r="50"/>
-          <circle class="rtrack" id="rTrackHub" cx="450" cy="124" r="68"/>
+          <circle class="rtrack" id="rTrackHub" cx="450" cy="124" r="78"/>
           <circle class="rarc" id="rRingBat"  cx="765" cy="182" r="50" pathLength="100"
                   stroke="var(--bat)" stroke-dasharray="0 100"
                   transform="rotate(-90 765 182)"/>
-          <circle class="rarc" id="rRingHub"  cx="450" cy="124" r="68" pathLength="100"
+          <circle class="rarc" id="rRingHub"  cx="450" cy="124" r="78" pathLength="100"
                   stroke="var(--bat)" stroke-dasharray="0 100"
                   transform="rotate(-90 450 124)"/>
 
@@ -1027,11 +1030,13 @@ body .dash[data-slide="weather"]{
           <text class="rname"   x="765" y="249" text-anchor="middle">BATTERY</text>
 
           <!-- the hub's level is the point of the diagram, so its number is
-               the largest on it, and its labels sit below the bigger ring -->
+               the largest on it, and its labels sit below the bigger ring.
+               They move down with the ring, so that the gap between the
+               ring and the label stays the same. -->
           <text class="rval rhub" x="450" y="140" text-anchor="middle" id="rHubVal">0%</text>
           <text class="rstatus" x="450" y="161" text-anchor="middle" id="rHubSt">idle</text>
-          <text class="rhub"   x="450" y="210" text-anchor="middle">INVERTER</text>
-          <text class="rstatus" x="450" y="226" text-anchor="middle" id="rHubModel">-</text>
+          <text class="rhub"   x="450" y="220" text-anchor="middle">INVERTER</text>
+          <text class="rstatus" x="450" y="236" text-anchor="middle" id="rHubModel">-</text>
         </svg>
       </div>
       <div class="flowhint" id="flowHint"></div>

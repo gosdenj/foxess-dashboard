@@ -143,9 +143,9 @@ right now. The flow lines are dotted and carry moving dashes in the direction
 the power is actually going, and a line only appears when there is power on
 it — so an idle system stays calm instead of flickering.
 
-The hub's ring is a little bigger than the four around it, and the level in
-the middle is the biggest number on the diagram — the inverter is the centre
-of it, and that is where the eye should land first.
+The hub's ring is bigger than the four around it — it is the middle of the
+diagram — and the level in the middle is the biggest number on it, so the
+inverter is where the eye lands first.
 
 **The battery level is a ring.** The hub and the battery node both show the
 state of charge as an arc that fills clockwise from the top, and the colour

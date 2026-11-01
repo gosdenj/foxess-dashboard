@@ -370,6 +370,82 @@ class TestRingWireBend(unittest.TestCase):
                                    msg=f"{left} and {right} are not mirrored")
 
 
+class TestTheHub(unittest.TestCase):
+    """The hub is the inverter, and it is the middle of the diagram.
+
+    It is a ring with the state of charge in it, and its name and its
+    firmware sit *below* it - so when the ring is made bigger, the names
+    have to move down with it, or they end up drawn across the ring.
+    """
+
+    def setUp(self) -> None:
+        self.index = _read(INDEX)
+        rings = self.index[self.index.index('id="ringsSvg"'):]
+        self.rings = rings[:rings.index("</svg>")]
+
+    def _hub(self) -> tuple:
+        """The hub's centre and radius, from the markup."""
+        match = re.search(r'<circle[^>]*?\sid="rRingHub"[^>]*?\scx="([\d.]+)"'
+                          r'\s+cy="([\d.]+)"[^>]*?\sr="([\d.]+)"', self.rings)
+        self.assertIsNotNone(match, "the hub is missing")
+        return (float(match.group(1)), float(match.group(2)),
+                float(match.group(3)))
+
+    def test_the_hub_is_as_big_as_it_was_made(self):
+        """It was 68 and it is 78 now.
+
+        The point of the change was that the inverter - the middle of the
+        diagram, and the thing the whole diagram is about - was the
+        smallest thing on it.  This is here so that it cannot quietly go
+        back.
+        """
+        _, _, radius = self._hub()
+        self.assertGreaterEqual(radius, 78.0)
+
+    def test_the_name_sits_below_the_ring_and_not_across_it(self):
+        """The INVERTER label is under the hub, so a bigger hub pushes it
+        down - otherwise the label is drawn over the ring."""
+        cx, cy, radius = self._hub()
+        match = re.search(r'<text class="rhub"\s+x="([\d.]+)"\s+y="([\d.]+)"',
+                          self.rings)
+        self.assertIsNotNone(match, "the INVERTER label is missing")
+        baseline = float(match.group(2))
+        font = float(re.search(r"\.ringsvg \.rhub\{[^}]*font-size:(\d+)px",
+                               self.index).group(1))
+        # the ring's stroke is 6 wide, so it reaches half a stroke further out
+        outer = cy + radius + 3
+        self.assertGreater(baseline - font, outer,
+                           "the INVERTER label is drawn across the hub's ring")
+
+    def test_the_firmware_sits_below_the_name(self):
+        """Two lines of text under the hub, in order."""
+        name = re.search(r'<text class="rhub"\s+x="[\d.]+"\s+y="([\d.]+)"',
+                         self.rings)
+        model = re.search(r'<text[^>]*id="rHubModel"[^>]*>', self.rings)
+        self.assertIsNotNone(name)
+        self.assertIsNotNone(model)
+        self.assertGreater(self._y(model.group(0)), float(name.group(1)))
+
+    def test_the_hub_still_fits_the_diagram(self):
+        """The ring has to stay inside the drawing, with room for its
+        names underneath."""
+        cx, cy, radius = self._hub()
+        view = re.search(r'id="ringsSvg"[^>]*viewBox="0 0 ([\d.]+) ([\d.]+)"',
+                         self.index)
+        width, height = float(view.group(1)), float(view.group(2))
+        self.assertGreater(cy - radius, 0, "the hub is off the top")
+        self.assertGreater(cx - radius, 0, "the hub is off the left")
+        self.assertLess(cx + radius, width, "the hub is off the right")
+        # the names are below it, and they are below the drawing too
+        model = re.search(r'<text[^>]*id="rHubModel"[^>]*>', self.rings).group(0)
+        self.assertLess(self._y(model) + 3, height, "the firmware is off the bottom")
+
+    @staticmethod
+    def _y(tag: str) -> float:
+        """The y of an SVG tag, wherever in the tag it is written."""
+        return float(re.search(r'\sy="([\d.]+)"', tag).group(1))
+
+
 class TestDiagramSwitching(unittest.TestCase):
 
     def setUp(self) -> None:
