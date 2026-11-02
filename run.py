@@ -1079,6 +1079,13 @@ def _report_mini(payload: dict, daily: dict) -> None:
 #: and there is no need to be a burden on a free service.
 WEATHER_INTERVAL = 900
 
+#: How long to wait before trying again after a failure.  The service is
+#: sometimes too busy to answer, and it says so - so it is asked again
+#: sooner than the usual round, and the gap grows each time it fails, up
+#: to the usual interval.  A service under load is not helped by being
+#: hammered.
+WEATHER_RETRY = 60
+
 #: How many days of the sun are kept for the calibration.
 WEATHER_PAST_DAYS = 21
 
@@ -1095,31 +1102,52 @@ def plant_timezone(state: DashboardState, config: ConfigStore) -> str:
     return tz or "Europe/London"
 
 
+def weather_request(config: ConfigStore) -> dict:
+    """What to ask the weather service for.
+
+    Kept apart from the fetching so that the worker can make the call
+    itself - it is the worker that has to know whether the call worked,
+    and that is what decides whether the last good reply is used instead.
+    """
+    return {
+        "latitude": config.get("weather.latitude"),
+        "longitude": config.get("weather.longitude"),
+        "tilt": int(config.get("weather.tilt", weather.DEFAULT_TILT) or 0),
+        "azimuth": int(config.get("weather.azimuth", weather.DEFAULT_AZIMUTH) or 0),
+        "temperature": config.get("weather.temperature_unit", "celsius"),
+        "wind": config.get("weather.wind_speed_unit", "kmh"),
+    }
+
+
 def collect_weather(state: DashboardState, config: ConfigStore,
                     demo: bool = False,
-                    history: HalfHourHistory | None = None) -> dict:
+                    history: HalfHourHistory | None = None,
+                    raw: dict | None = None) -> dict:
     """The weather, the outlook, and the sun as it will land on the roof.
 
     The solar forecast is the interesting part.  The weather service knows
     how much sun lands on a tilted plane, but not how much of it your
     array collects - so that is measured, by putting the inverter's own
     daily yield next to the forecast for the same days.
+
+    *raw* is the reply from the service.  It is passed in rather than
+    fetched here, so that a reply from the cache can be used when the
+    service cannot be reached.
     """
-    latitude = config.get("weather.latitude")
-    longitude = config.get("weather.longitude")
+    request = weather_request(config)
     name = config.get("weather.location", "") or ""
     # The units are wanted even when there is no forecast to go with them,
     # so that the slide shows the ones that are set rather than the
     # defaults it would fall back on.
-    temperature = config.get("weather.temperature_unit", "celsius")
-    wind = config.get("weather.wind_speed_unit", "kmh")
+    temperature = request["temperature"]
+    wind = request["wind"]
     units = {
         "temperature": weather.temperature_unit(temperature),
         "wind": weather.wind_unit(wind),
         "precipitation": "mm",
     }
     now = time.time()
-    if latitude in (None, "") or longitude in (None, ""):
+    if request["latitude"] in (None, "") or request["longitude"] in (None, ""):
         return {
             "location": {"name": name},
             "error": "no location set - add one in the settings",
@@ -1128,14 +1156,16 @@ def collect_weather(state: DashboardState, config: ConfigStore,
             "attribution": weather.ATTRIBUTION,
         }
 
-    tilt = int(config.get("weather.tilt", weather.DEFAULT_TILT) or 0)
-    azimuth = int(config.get("weather.azimuth", weather.DEFAULT_AZIMUTH) or 0)
+    tilt = request["tilt"]
+    azimuth = request["azimuth"]
     performance_ratio = config.get("weather.performance_ratio",
                                    weather.DEFAULT_PERFORMANCE_RATIO)
 
-    raw = weather.fetch(latitude, longitude, tilt=tilt, azimuth=azimuth,
-                        temperature=temperature, wind=wind,
-                        past_days=WEATHER_PAST_DAYS, forecast_days=7)
+    if raw is None:
+        raw = weather.fetch(request["latitude"], request["longitude"],
+                            tilt=tilt, azimuth=azimuth,
+                            temperature=temperature, wind=wind,
+                            past_days=WEATHER_PAST_DAYS, forecast_days=7)
     payload = weather.parse(raw, name, temperature=temperature, wind=wind)
 
     # -- the calibration ------------------------------------------------
@@ -1365,21 +1395,70 @@ def demo_weather(temperature: str = "celsius", wind: str = "kmh") -> dict:
 def weather_worker(state: DashboardState, config: ConfigStore,
                    stop: threading.Event, wake: threading.Event | None = None,
                    demo: bool = False,
-                   history: HalfHourHistory | None = None) -> None:
+                   history: HalfHourHistory | None = None,
+                   cache: weather.ForecastCache | None = None) -> None:
     """Keep the weather and the solar forecast up to date.
 
     The worker never dies: a failure is reported on the slide and tried
     again on the next round.
+
+    When the service cannot be reached - it is sometimes too busy to
+    answer, and says so with a 503 - the last good reply is used instead,
+    as long as it is not too old to be worth showing.  The slide then says
+    how old it is, because a forecast shown as if it were live is worse
+    than an honest error.
     """
+    failures = 0
     while not stop.is_set():
+        payload = None
         try:
             if demo and not config.get("weather.latitude"):
                 payload = demo_weather(
                     config.get("weather.temperature_unit", "celsius"),
                     config.get("weather.wind_speed_unit", "kmh"))
+                failures = 0
             else:
-                payload = collect_weather(state, config, demo=demo,
-                                          history=history)
+                request = weather_request(config)
+                if request["latitude"] in (None, "") \
+                        or request["longitude"] in (None, ""):
+                    # nothing to ask the service for
+                    payload = collect_weather(state, config, demo=demo,
+                                              history=history)
+                    failures = 0
+                else:
+                    try:
+                        raw = weather.fetch(
+                            request["latitude"], request["longitude"],
+                            tilt=request["tilt"], azimuth=request["azimuth"],
+                            temperature=request["temperature"], wind=request["wind"],
+                            past_days=WEATHER_PAST_DAYS, forecast_days=7)
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"weather: {type(exc).__name__}: {exc}")
+                        cached = cache.load() if cache is not None else None
+                        if cached is None:
+                            raise
+                        raw, fetched = cached
+                        age = weather.ForecastCache.age(fetched)
+                        if not weather.ForecastCache.usable(fetched):
+                            print(f"weather: the last good forecast is "
+                                  f"{age / 3600:.1f} h old - too old to show")
+                            raise
+                        payload = collect_weather(state, config, demo=demo,
+                                                  history=history, raw=raw)
+                        # the slide has to know that this is the old one
+                        payload["stale"] = True
+                        payload["age"] = int(age)
+                        payload["updated"] = fetched
+                        payload["stale_error"] = f"{type(exc).__name__}: {exc}"
+                        # the service is still not answering, so it is
+                        # asked again sooner than the usual round
+                        failures += 1
+                    else:
+                        payload = collect_weather(state, config, demo=demo,
+                                                  history=history, raw=raw)
+                        if cache is not None:
+                            cache.save(raw)
+                        failures = 0
         except Exception as exc:  # noqa: BLE001
             payload = {"error": f"{type(exc).__name__}: {exc}",
                        "updated": time.time(), "days": [], "current": {},
@@ -1391,6 +1470,7 @@ def weather_worker(state: DashboardState, config: ConfigStore,
                                config.get("weather.wind_speed_unit", "kmh")),
                            "precipitation": "mm"}}
             print(f"weather failed: {payload['error']}")
+            failures += 1
         if payload:
             state.set_weather(payload)
             solar = payload.get("solar") or {}
@@ -1402,7 +1482,15 @@ def weather_worker(state: DashboardState, config: ConfigStore,
                       f" {solar.get('source')})")
             elif solar.get("reason"):
                 print(f"weather: {solar['reason']}")
-        _wait(stop, wake, WEATHER_INTERVAL)
+            if payload.get("stale"):
+                print(f"weather: showing the last good forecast,"
+                      f" {payload.get('age', 0) // 3600} h old")
+        # A service that is too busy to answer is asked again sooner than
+        # the usual round - but not straight away, and not for ever: the
+        # gap grows with each failure, up to the usual interval.
+        wait = WEATHER_INTERVAL if not failures else min(
+            WEATHER_INTERVAL, WEATHER_RETRY * (2 ** (failures - 1)))
+        _wait(stop, wake, wait)
 
 
 def _wait(stop: threading.Event, wake: threading.Event | None,
@@ -1488,6 +1576,21 @@ def open_history(config_path: Path, demo: bool = False) -> HalfHourHistory:
         return HalfHourHistory(None)
     return HalfHourHistory(
         config_path.with_name(config_path.stem + "-history.json"))
+
+
+def open_weather_cache(config_path: Path,
+                       demo: bool = False) -> weather.ForecastCache:
+    """The last good forecast, kept with the settings.
+
+    It is kept next to the settings file, in the same way as the
+    inverter's own history, so that the two travel together and the
+    forecast survives a restart.  The demo keeps it in memory instead:
+    it is made up, and it must never be written over the real one.
+    """
+    if demo:
+        return weather.ForecastCache(None)
+    return weather.ForecastCache(
+        config_path.with_name(config_path.stem + "-weather.json"))
 
 
 def seed_demo_history(history=None) -> None:
@@ -1649,6 +1752,7 @@ def main() -> int:
 
     config_path = config.path
     history = open_history(config_path, args.demo)
+    weather_cache = open_weather_cache(config_path, args.demo)
 
     host = args.host or config.get("server.host", "0.0.0.0")
     port = args.port or int(config.get("server.port", 8765) or 8765)
@@ -1701,7 +1805,8 @@ def main() -> int:
                      daemon=True, name="mini").start()
     threading.Thread(target=weather_worker,
                      args=(state, config, controller.stop,
-                           controller.weather_wake, False, history),
+                           controller.weather_wake, False, history,
+                           weather_cache),
                      daemon=True, name="weather").start()
 
     try:

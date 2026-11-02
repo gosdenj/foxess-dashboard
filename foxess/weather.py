@@ -24,8 +24,13 @@ array in kWp can be worked out from it.
 from __future__ import annotations
 
 import json
+import os
+import stat
+import tempfile
+import threading
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from statistics import median
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -110,6 +115,101 @@ DEFAULT_AZIMUTH = 0          # 0 is south, as Open-Meteo counts it
 
 class WeatherError(RuntimeError):
     """Raised when the weather service cannot be reached, or says no."""
+
+
+# ---------------------------------------------------------------------------
+# Keeping the last good reply
+# ---------------------------------------------------------------------------
+
+#: How long a cached forecast may still be shown.
+#:
+#: A forecast does not move much in six hours - tomorrow is still tomorrow,
+#: and the week ahead is still the week ahead - but the conditions in it
+#: are six hours old, so the slide says so.  Past that the forecast has
+#: drifted too far to be worth showing, and the slide says there is none.
+CACHE_MAX_AGE = 6 * 3600
+
+#: The version of the cache file.  A reply of a different shape is not
+#: worth guessing at, so an old file is thrown away rather than read.
+CACHE_VERSION = 1
+
+
+class ForecastCache:
+    """The last good reply from the weather service, kept on disk.
+
+    The service is sometimes too busy to answer - it says so with a 503
+    and "the service is overloaded" - and a dashboard that empties itself
+    when that happens is worse than one that shows the last forecast it
+    managed to get, marked as old.  So the reply is kept, and used when
+    there is nothing better.
+
+    It is kept next to the settings file, in the same way as the
+    inverter's own history: a small JSON file that travels with the
+    configuration.  It holds the plant's coordinates, so it is written for
+    the owner only.
+    """
+
+    def __init__(self, path: str | os.PathLike | None = None) -> None:
+        self.path = Path(path) if path else None
+        self._lock = threading.Lock()
+
+    def save(self, raw: dict, when: float | None = None) -> None:
+        """Keep a reply, with the time it was fetched."""
+        if self.path is None:
+            return
+        payload = {"version": CACHE_VERSION,
+                   "fetched": float(when if when is not None else time.time()),
+                   "raw": raw}
+        with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            handle, tmp = tempfile.mkstemp(dir=str(self.path.parent),
+                                           prefix=".weather-")
+            try:
+                with os.fdopen(handle, "w", encoding="utf-8") as fh:
+                    json.dump(payload, fh)
+                # the file has the plant's coordinates in it
+                os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)   # 0600
+                os.replace(tmp, self.path)
+            except OSError:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+
+    def load(self) -> tuple[dict, float] | None:
+        """The cached reply and the time it was fetched, or nothing.
+
+        A file that is missing, unreadable or of another version is worth
+        nothing, and is treated as if it were not there.
+        """
+        if self.path is None:
+            return None
+        with self._lock:
+            try:
+                data = json.loads(self.path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return None
+        if not isinstance(data, dict) or data.get("version") != CACHE_VERSION:
+            return None
+        raw = data.get("raw")
+        if not isinstance(raw, dict):
+            return None
+        try:
+            fetched = float(data.get("fetched"))
+        except (TypeError, ValueError):
+            return None
+        return raw, fetched
+
+    @staticmethod
+    def age(fetched: float) -> float:
+        """How long ago the cached reply was fetched."""
+        return max(0.0, time.time() - float(fetched))
+
+    @staticmethod
+    def usable(fetched: float, max_age: float = CACHE_MAX_AGE) -> bool:
+        """Whether the cached reply is still worth showing."""
+        return ForecastCache.age(fetched) <= max_age
 
 
 # ---------------------------------------------------------------------------

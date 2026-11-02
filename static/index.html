@@ -1122,6 +1122,18 @@ function setAttr(el, name, value){
   if(el && el.getAttribute(name) !== value) el.setAttribute(name, value);
 }
 
+/* How old a forecast is, for when it is the last good one rather than a
+   fresh reply.  The weather service is sometimes too busy to answer, and
+   the slide says how old the forecast it is showing is instead of
+   passing it off as live. */
+function staleAgeText(seconds){
+  const s = Math.max(0, Math.round(Number(seconds)||0));
+  if(s < 60) return "just now";
+  const mins = Math.round(s/60);
+  if(mins < 90) return mins+" min old";
+  return Math.round(mins/60)+" h old";
+}
+
 /* How healthy is the pack right now?
    green while it is comfortably charged, amber when it is getting low, and
    red once it has reached the inverter's own minimum. */
@@ -1725,6 +1737,12 @@ function renderWeather(w, serverTime){
   const tempUnit = units.temperature || "°C";
   const precipUnit = units.precipitation || "mm";
   const loc = (w && w.location) || {};
+  // The service is sometimes too busy to answer, and then the slide shows
+  // the last forecast it managed to get.  It says how old that is, rather
+  // than passing it off as live: a forecast shown as if it were current
+  // is worse than an honest error.
+  const stale = !!(w && w.stale);
+  const ageText = stale ? staleAgeText(w.age) : "";
 
   if(!UI.wxBuilt){
     UI.wxBuilt = true;
@@ -1763,7 +1781,8 @@ function renderWeather(w, serverTime){
 
   const empty = !days.length;
   setText($("wxTemp"), cur.temperature!=null ? Math.round(cur.temperature)+tempUnit : "—");
-  setText($("wxText"), empty ? ((w && w.error) || "no forecast") : (cur.text || "—"));
+  setText($("wxText"), empty ? ((w && w.error) || "no forecast")
+                    : ((cur.text || "—") + (ageText ? " · "+ageText : "")));
   setText($("wxWind"), cur.wind!=null
     ? Math.round(cur.wind)+" "+windUnit+(cur.wind_text?" "+cur.wind_text:"") : "");
   setIcon($("wxIcon"), empty ? "cloud" : cur.icon);
@@ -1810,7 +1829,10 @@ function renderWeather(w, serverTime){
     if(row && row.style.display) row.style.display = "";
   }
 
-  setText($("wxCalib"), calibrated ? "kWh, your array" : "kWh/m² of sun");
+  // The numbers in this panel are worked out from the forecast, so the
+  // panel says how old that forecast is.
+  const calib = calibrated ? "kWh, your array" : "kWh/m² of sun";
+  setText($("wxCalib"), calib + (ageText ? " · " + ageText : ""));
   let hint = "";
   if(calibrated){
     const kwp = solar.kwp!=null ? Number(solar.kwp).toFixed(1)+" kWp" : "";

@@ -6,8 +6,10 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -806,6 +808,223 @@ class TestDaylightBand(unittest.TestCase):
         self.assertIn("renderWeather(s.weather || {}, s.server_time)",
                       self.index)
         self.assertIn("placeMinutes(timezone, serverTime)", self.index)
+
+
+class TestTheForecastCache(unittest.TestCase):
+    """The last good reply, kept on disk.
+
+    The weather service is sometimes too busy to answer - it says so with
+    a 503 - and a dashboard that empties itself when that happens is worse
+    than one that shows the last forecast it managed to get, marked as
+    old.  So the reply is kept.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.dir.name, "config-weather.json")
+        self.cache = weather.ForecastCache(self.path)
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def test_a_reply_survives_a_restart(self):
+        """The cache is on disk, so a restart does not lose it."""
+        raw = _raw()
+        self.cache.save(raw)
+        loaded = weather.ForecastCache(self.path).load()
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded[0], raw)
+        self.assertLess(abs(loaded[1] - time.time()), 60)
+
+    def test_nothing_cached_is_nothing(self):
+        self.assertIsNone(self.cache.load())
+
+    def test_a_broken_file_is_nothing(self):
+        with open(self.path, "w", encoding="utf-8") as fh:
+            fh.write("{not json at all")
+        self.assertIsNone(self.cache.load())
+
+    def test_a_file_of_another_version_is_nothing(self):
+        """A reply of a different shape is not worth guessing at."""
+        with open(self.path, "w", encoding="utf-8") as fh:
+            json.dump({"version": 99, "fetched": time.time(), "raw": {}}, fh)
+        self.assertIsNone(self.cache.load())
+
+    def test_the_file_is_for_the_owner_only(self):
+        """It holds the plant's coordinates."""
+        self.cache.save(_raw())
+        self.assertEqual(os.stat(self.path).st_mode & 0o777, 0o600)
+
+    def test_it_is_kept_next_to_the_settings(self):
+        """So that the two travel together."""
+        import run
+        cache = run.open_weather_cache(Path("/tmp/config.json"))
+        self.assertEqual(cache.path, Path("/tmp/config-weather.json"))
+
+    def test_the_demo_keeps_its_cache_to_itself(self):
+        """It is made up, and it must never be written over the real one."""
+        import run
+        path = os.path.join(self.dir.name, "config.json")
+        cache = run.open_weather_cache(Path(path), demo=True)
+        self.assertIsNone(cache.path)
+        cache.save(_raw())          # which does nothing at all
+        self.assertFalse(os.path.exists(os.path.join(self.dir.name,
+                                                     "config-weather.json")))
+
+    def test_a_reply_of_six_hours_is_still_worth_showing(self):
+        """A forecast does not move much in six hours."""
+        self.assertTrue(weather.ForecastCache.usable(time.time()))
+        self.assertTrue(weather.ForecastCache.usable(
+            time.time() - weather.CACHE_MAX_AGE + 60))
+
+    def test_an_older_one_is_not(self):
+        """Past that the forecast has drifted too far to be worth showing."""
+        self.assertFalse(weather.ForecastCache.usable(
+            time.time() - weather.CACHE_MAX_AGE - 60))
+
+
+class TestTheFallback(unittest.TestCase):
+    """What the slide shows when the service cannot be reached."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.dir.name, "config-weather.json")
+        self.cache = weather.ForecastCache(self.path)
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def _config(self):
+        config = mock.Mock()
+        config.get.side_effect = lambda key, default=None: {
+            "weather.latitude": 51.8,
+            "weather.longitude": -0.2,
+            "weather.location": "Somewhere",
+            "weather.temperature_unit": "celsius",
+            "weather.wind_speed_unit": "kmh",
+        }.get(key, default)
+        return config
+
+    def _run(self, cache, fetch):
+        """One round of the weather worker, with the fetch replaced."""
+        import run
+        state = DashboardState()
+        stop = mock.Mock()
+        stop.is_set.side_effect = [False, True, True]
+        wake = mock.Mock()
+        wake.wait.return_value = True
+        with mock.patch.object(weather, "fetch", fetch):
+            run.weather_worker(state, self._config(), stop, wake,
+                               cache=cache)
+        return state.weather(), wake
+
+    @staticmethod
+    def _boom(*args, **kwargs):
+        raise weather.WeatherError(
+            'HTTP 503: {"error":true,"reason":"The service is overloaded"}')
+
+    def test_a_failed_fetch_keeps_the_last_good_forecast(self):
+        """The slide does not empty itself when the service is busy."""
+        self.cache.save(_raw(), when=time.time() - 1800)
+        payload, _ = self._run(self.cache, self._boom)
+        self.assertTrue(payload.get("stale"))
+        self.assertTrue(payload["days"], "the week ahead went missing")
+        self.assertEqual(payload["current"]["temperature"], 12.5)
+
+    def test_the_fallback_says_how_old_it_is(self):
+        """A forecast shown as if it were live would be worse than an error."""
+        fetched = time.time() - 5400
+        self.cache.save(_raw(), when=fetched)
+        payload, _ = self._run(self.cache, self._boom)
+        self.assertTrue(payload.get("stale"))
+        self.assertGreater(payload["age"], 5300)
+        self.assertLess(payload["age"], 5500)
+        # and the time on the payload is when the forecast was fetched,
+        # not when it was used
+        self.assertAlmostEqual(payload["updated"], fetched, delta=2)
+
+    def test_the_reason_is_kept_as_well(self):
+        """So that the log says why it is showing the old one."""
+        self.cache.save(_raw(), when=time.time() - 60)
+        payload, _ = self._run(self.cache, self._boom)
+        self.assertIn("503", payload.get("stale_error", ""))
+
+    def test_a_cache_that_is_too_old_is_not_used(self):
+        """Past six hours the forecast has drifted too far."""
+        self.cache.save(_raw(), when=time.time() - weather.CACHE_MAX_AGE - 60)
+        payload, _ = self._run(self.cache, self._boom)
+        self.assertNotIn("stale", payload)
+        self.assertEqual(payload["days"], [])
+        self.assertIn("error", payload)
+
+    def test_a_failure_with_no_cache_is_the_error(self):
+        """As it was before there was a cache."""
+        payload, _ = self._run(None, self._boom)
+        self.assertEqual(payload["days"], [])
+        self.assertIn("error", payload)
+        self.assertIn("503", payload["error"])
+
+    def test_a_reply_is_kept_for_next_time(self):
+        payload, _ = self._run(self.cache, lambda *a, **k: _raw())
+        self.assertNotIn("stale", payload)
+        self.assertTrue(payload["days"])
+        self.assertIsNotNone(self.cache.load())
+
+    def test_a_service_that_is_busy_is_asked_again_sooner(self):
+        """Not in a quarter of an hour, and not in a tight loop either."""
+        _, wake = self._run(None, self._boom)
+        self.assertEqual(wake.wait.call_args[0][0], 60)
+
+    def test_a_service_that_is_still_busy_is_asked_again_sooner(self):
+        """Showing the old forecast does not mean the service answered."""
+        self.cache.save(_raw(), when=time.time() - 60)
+        _, wake = self._run(self.cache, self._boom)
+        self.assertEqual(wake.wait.call_args[0][0], 60)
+
+    def test_a_service_that_answers_is_asked_again_at_the_usual_time(self):
+        """The backoff is for a service that is failing, not for all of them."""
+        _, wake = self._run(self.cache, lambda *a, **k: _raw())
+        self.assertEqual(wake.wait.call_args[0][0], 900)
+
+    def test_the_worker_keeps_going_after_a_failure(self):
+        """It must not die: the slide would stop updating for ever."""
+        import run
+        state = DashboardState()
+        stop = mock.Mock()
+        stop.is_set.side_effect = [False, False, True, True]
+        wake = mock.Mock()
+        wake.wait.return_value = True
+        with mock.patch.object(weather, "fetch", self._boom):
+            run.weather_worker(state, self._config(), stop, wake,
+                               cache=self.cache)
+        self.assertIn("error", state.weather())
+
+
+class TestTheStaleMarker(unittest.TestCase):
+    """The slide says how old the forecast it is showing is."""
+
+    def setUp(self):
+        self.index = _read(INDEX)
+
+    def test_the_conditions_carry_the_age(self):
+        """The temperature is the number that goes out of date first."""
+        self.assertIn("const stale = !!(w && w.stale);", self.index)
+        self.assertIn("staleAgeText(w.age)", self.index)
+        self.assertIn('" · "+ageText', self.index)
+
+    def test_the_solar_forecast_says_so_too(self):
+        """The numbers there are worked out from the forecast."""
+        self.assertIn('calib + (ageText ? " · " + ageText : "")', self.index)
+
+    def test_a_fresh_forecast_says_nothing(self):
+        """The marker is only added when the payload says it is stale."""
+        self.assertIn('const ageText = stale ? staleAgeText(w.age) : "";',
+                      self.index)
+
+    def test_the_age_is_read_in_minutes_and_hours(self):
+        self.assertIn("function staleAgeText(seconds)", self.index)
+        self.assertIn('return mins+" min old";', self.index)
+        self.assertIn('" h old"', self.index)
 
 
 if __name__ == "__main__":

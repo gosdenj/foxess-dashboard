@@ -295,6 +295,13 @@ forecast for your own roof, and the week ahead. The weather comes from
 use — the credit on the slide is all that is asked for. It is polled every
 fifteen minutes, which is as often as a forecast changes much.
 
+The last good reply is kept on disk, next to the settings. The service is
+sometimes too busy to answer — it says so with a 503 — and then the slide
+shows the last forecast it managed to get, **with its age on it**, for as
+long as six hours; after that the slide says there is no forecast, because
+a day-old forecast is worse than none. A service under load is asked again
+sooner than the usual round, and the gap grows each time it fails.
+
 Set the place in **Settings → Weather & solar forecast**. Type a town and
 press **Find**; the gazetteer only knows towns and villages, so a hamlet
 or a street will not be found — use the town nearby. The latitude and
